@@ -71,6 +71,15 @@ drake_lcm_cc_library(
 )
 
 drake_lcm_cc_library(
+    name = "traj_opt",
+    lcm_package = "drake",
+    lcm_srcs = [
+        "lcmt_traj_opt_x.lcm",
+        "lcmt_traj_opt_u.lcm",
+    ],
+)
+
+drake_lcm_cc_library(
     name = "call_python",
     lcm_package = "drake",
     lcm_srcs = [
@@ -317,6 +326,7 @@ LCMTYPES_CC = [
     ":robot_plan",
     ":schunk",
     ":scope",
+    ":traj_opt",
     ":viewer",
 ]
 
