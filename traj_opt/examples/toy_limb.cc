@@ -10,6 +10,7 @@ namespace toy_limb {
 
 using multibody::MultibodyPlant;
 using multibody::Parser;
+using Eigen::Vector3d;
 
 class ToyLimbExample : public TrajOptExample {
  public:
@@ -30,6 +31,11 @@ class ToyLimbExample : public TrajOptExample {
     // Parser(plant).AddAllModelsFromFile(urdf_file_table);
     Parser(plant).AddAllModelsFromFile(urdf_file_limb);
     Parser(plant).AddAllModelsFromFile(urdf_file_ball);
+
+    // Define gravity (so we can turn the hand upside down)
+    // if (FLAGS_upside_down) {
+    plant->mutable_gravity_field().set_gravity_vector(Vector3d(0, -1.0, 0.0));
+    // }
 
     // plant->WeldFrames(plant->world_frame(), plant->GetFrameByName("base_link"));
   }
