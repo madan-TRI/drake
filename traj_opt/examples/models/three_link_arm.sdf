@@ -25,14 +25,21 @@
           <diffuse>1 0 0 1</diffuse>
         </material>
       </visual>
-      <collision name="link1_collision">
+      <!-- <collision name="sphere1">
         <geometry>
-          <cylinder>
+          <sphere>
             <radius>0.025</radius>
-            <length>0.2</length>
-          </cylinder>
+          </sphere>
         </geometry>
       </collision>
+      <collision name="sphere2">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 0.2 0 0 0</pose>
+      </collision> -->
     </link>
 
     <joint name="joint1" type="revolute">
@@ -79,14 +86,21 @@
           <diffuse>0 1 0 1</diffuse>
         </material>
       </visual>
-      <collision name="link2_collision">
+      <collision name="link2_sphere1">
+        <geometry>
+          <sphere>
+            <radius>0.1</radius>
+          </sphere>
+        </geometry>
+      </collision>
+      <!-- <collision name="link2_collision">
         <geometry>
           <cylinder>
             <radius>0.025</radius>
             <length>0.3</length>
           </cylinder>
         </geometry>
-      </collision>
+      </collision> -->
     </link>
 
     <joint name="joint2" type="revolute">
@@ -95,8 +109,8 @@
       <axis>
         <xyz>0 1 0</xyz>
         <limit>
-          <lower>-2.14</lower>
-          <upper>0.1</upper>
+          <lower>-0.01</lower>
+          <upper>0.01</upper>
           <effort>0</effort>
           <velocity>1.0</velocity>
         </limit>
@@ -132,13 +146,52 @@
           <diffuse>0 0 1 1</diffuse>
         </material>
       </visual>
-      <collision name="link3_collision">
+      <collision name="link3_sphere1">
         <geometry>
-          <cylinder>
+          <sphere>
             <radius>0.025</radius>
-            <length>0.2</length>
-          </cylinder>
+          </sphere>
         </geometry>
+      </collision>
+      <collision name="link3_sphere2">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 0.05 0 0 0</pose>
+      </collision>
+      <collision name="link3_sphere3">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 -0.05 0 0 0</pose>
+      </collision>
+      <collision name="link3_sphere4">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 -0.1 0 0 0</pose>
+      </collision>
+      <collision name="link3_sphere5">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 -0.15 0 0 0</pose>
+      </collision>
+      <collision name="link3_sphere6">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 0.1 0 0 0</pose>
       </collision>
     </link>
 
@@ -148,8 +201,8 @@
       <axis>
         <xyz>0 1 0</xyz>
         <limit>
-          <lower>-2.14159</lower>
-          <upper>2.14159</upper>
+          <lower>-0.01</lower>
+          <upper>0.01</upper>
           <effort>0</effort>
           <velocity>1.0</velocity>
         </limit>
