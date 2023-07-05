@@ -49,8 +49,8 @@
       <axis>
         <xyz>1 0 0</xyz>
          <limit>
-          <lower>-1.0</lower>
-          <upper>1.0</upper>
+          <lower>-5.0</lower>
+          <upper>5.0</upper>
           <velocity>1.0</velocity>
         </limit>
       </axis>
@@ -62,8 +62,8 @@
       <axis>
         <xyz>0 1 0</xyz>
          <limit>
-          <lower>-1.0</lower>
-          <upper>1.0</upper>
+          <lower>-5.0</lower>
+          <upper>5.0</upper>
           <velocity>1.0</velocity>
         </limit>
       </axis>
