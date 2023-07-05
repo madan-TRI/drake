@@ -196,6 +196,24 @@ drake_cc_binary(
 )
 
 drake_cc_binary(
+    name = "toy_limb",
+    srcs = ["toy_limb.cc"],
+    add_test_rule = 1,
+    data = [
+        ":toy_limb.yaml",
+        ":models",
+    ],
+    test_rule_args = [],
+    deps = [
+        ":example_base",
+        "//common:find_resource",
+        "//multibody/parsing",
+        "//multibody/plant",
+    ],
+)
+
+
+drake_cc_binary(
     name = "2dof_spinner",
     srcs = ["2dof_spinner.cc"],
     add_test_rule = 1,
