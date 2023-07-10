@@ -34,7 +34,7 @@ class ToyLimbExample : public TrajOptExample {
 
     // Define gravity (so we can turn the hand upside down)
     // if (FLAGS_upside_down) {
-    plant->mutable_gravity_field().set_gravity_vector(Vector3d(0, -1.0, 0.0));
+    // plant->mutable_gravity_field().set_gravity_vector(Vector3d(0, -9.81, 0.0));
     // }
 
     // plant->WeldFrames(plant->world_frame(), plant->GetFrameByName("base_link"));

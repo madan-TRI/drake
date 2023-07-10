@@ -18,28 +18,38 @@
         <geometry>
           <cylinder>
             <radius>0.025</radius>
-            <length>0.2</length>
+            <length>0.15</length>
           </cylinder>
         </geometry>
         <material>
           <diffuse>1 0 0 1</diffuse>
         </material>
       </visual>
-      <!-- <collision name="sphere1">
+      <!-- using multiple collision spheres for collision geometry -->
+      <collision name="link1_coll1">
         <geometry>
           <sphere>
             <radius>0.025</radius>
           </sphere>
         </geometry>
+        <pose>0 0 0 0 0 0</pose>
       </collision>
-      <collision name="sphere2">
+      <collision name="link1_coll2">
         <geometry>
           <sphere>
             <radius>0.025</radius>
           </sphere>
         </geometry>
-        <pose>0 0 0.2 0 0 0</pose>
-      </collision> -->
+        <pose>0 0 -0.05 0 0 0</pose>
+      </collision>
+      <collision name="link1_coll3">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 0.05 0 0 0</pose>
+      </collision>
     </link>
 
     <joint name="joint1" type="revolute">
@@ -54,7 +64,7 @@
           <velocity>1.0</velocity>
         </limit>
         <dynamics>
-          <!-- <damping>0.0</damping> -->
+          <damping>0.1</damping>
           <friction>100.0</friction>
           <!-- <spring_stiffness>0.1</spring_stiffness> -->
         </dynamics>
@@ -63,7 +73,7 @@
     </joint>
 
     <link name="link2">
-      <pose>0.25 0 0.05 1.57 0 1.57</pose>
+      <pose>0.225 0 0.05 1.57 0 1.57</pose>
       <inertial>
         <mass>1</mass>
         <inertia>
@@ -86,21 +96,29 @@
           <diffuse>0 1 0 1</diffuse>
         </material>
       </visual>
-      <collision name="link2_sphere1">
+      <collision name="link2_collision1">
         <geometry>
           <sphere>
-            <radius>0.1</radius>
+            <radius>0.025</radius>
           </sphere>
         </geometry>
       </collision>
-      <!-- <collision name="link2_collision">
+      <collision name="link2_collision2">
         <geometry>
-          <cylinder>
+          <sphere>
             <radius>0.025</radius>
-            <length>0.3</length>
-          </cylinder>
+          </sphere>
         </geometry>
-      </collision> -->
+        <pose>0 0 -0.05 0 0 0</pose>
+      </collision>
+      <collision name="link2_collision3">
+        <geometry>
+          <sphere>
+            <radius>0.025</radius>
+          </sphere>
+        </geometry>
+        <pose>0 0 0.05 0 0 0</pose>
+      </collision>
     </link>
 
     <joint name="joint2" type="revolute">
@@ -109,21 +127,21 @@
       <axis>
         <xyz>0 1 0</xyz>
         <limit>
-          <lower>-0.01</lower>
-          <upper>0.01</upper>
+          <lower>-2.14</lower>
+          <upper>0.1</upper>
           <effort>0</effort>
           <velocity>1.0</velocity>
         </limit>
         <dynamics>
-          <damping>0</damping>
-          <friction>10</friction>
+          <damping>0.1</damping>
+          <friction>100</friction>
         </dynamics>
       </axis>
       <pose>0.0 0 -0.15 0 0 0</pose>
     </joint>
 
     <link name="link3">
-      <pose>0.5 0 0.05 1.57 0 1.57</pose>
+      <pose>0.45 0 0.05 1.57 0 1.57</pose>
       <inertial>
         <mass>1</mass>
         <inertia>
@@ -139,29 +157,22 @@
         <geometry>
           <cylinder>
             <radius>0.025</radius>
-            <length>0.2</length>
+            <length>0.15</length>
           </cylinder>
         </geometry>
         <material>
           <diffuse>0 0 1 1</diffuse>
         </material>
       </visual>
-      <collision name="link3_sphere1">
+      <collision name="link3_coll1">
         <geometry>
           <sphere>
             <radius>0.025</radius>
           </sphere>
         </geometry>
+        <pose>0 0 0 0 0 0</pose>
       </collision>
-      <collision name="link3_sphere2">
-        <geometry>
-          <sphere>
-            <radius>0.025</radius>
-          </sphere>
-        </geometry>
-        <pose>0 0 0.05 0 0 0</pose>
-      </collision>
-      <collision name="link3_sphere3">
+      <collision name="link3_coll2">
         <geometry>
           <sphere>
             <radius>0.025</radius>
@@ -169,29 +180,13 @@
         </geometry>
         <pose>0 0 -0.05 0 0 0</pose>
       </collision>
-      <collision name="link3_sphere4">
+      <collision name="link3_coll3">
         <geometry>
           <sphere>
             <radius>0.025</radius>
           </sphere>
         </geometry>
-        <pose>0 0 -0.1 0 0 0</pose>
-      </collision>
-      <collision name="link3_sphere5">
-        <geometry>
-          <sphere>
-            <radius>0.025</radius>
-          </sphere>
-        </geometry>
-        <pose>0 0 -0.15 0 0 0</pose>
-      </collision>
-      <collision name="link3_sphere6">
-        <geometry>
-          <sphere>
-            <radius>0.025</radius>
-          </sphere>
-        </geometry>
-        <pose>0 0 0.1 0 0 0</pose>
+        <pose>0 0 0.05 0 0 0</pose>
       </collision>
     </link>
 
@@ -201,14 +196,14 @@
       <axis>
         <xyz>0 1 0</xyz>
         <limit>
-          <lower>-0.01</lower>
-          <upper>0.01</upper>
+          <lower>-2.14159</lower>
+          <upper>2.14159</upper>
           <effort>0</effort>
           <velocity>1.0</velocity>
         </limit>
         <dynamics>
-          <damping>0</damping>
-          <friction>10</friction>
+          <damping>0.1</damping>
+          <friction>100</friction>
           <!-- <spring_stiffness>0.03</spring_stiffness> -->
         </dynamics>
       </axis>
