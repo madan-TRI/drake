@@ -86,6 +86,7 @@ struct TrajOptExampleParams {
     a->Visit(DRAKE_NVP(q_nom_relative_to_q_init));
     a->Visit(DRAKE_NVP(save_mpc_result_as_static_html));
     a->Visit(DRAKE_NVP(static_html_filename));
+    a->Visit(DRAKE_NVP(use_demonstration));
   }
   // Initial state
   VectorXd q_init;
@@ -235,6 +236,9 @@ struct TrajOptExampleParams {
 
   // File name to save the meshcat recordint file to
   std::string static_html_filename{"/tmp/meshcat_recording.html"};
+
+  // Flag for using a demonstration as the initial guess
+  bool use_demonstration{false};
 };
 
 }  // namespace examples
