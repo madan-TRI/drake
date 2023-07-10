@@ -21,7 +21,7 @@
       </collision>
       
       <inertial>
-        <mass>1.0</mass>
+        <mass>10.0</mass>
         <inertia>
           <ixx>0.1</ixx>
           <ixy>0.0</ixy>

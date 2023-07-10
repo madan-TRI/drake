@@ -213,9 +213,13 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   // Visualize the target trajectory and initial guess, if requested
   if (options.play_target_trajectory) {
     PlayBackTrajectory(opt_prob.q_nom, options.time_step);
+    std::cout << "Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
   if (options.play_initial_guess) {
     PlayBackTrajectory(q_guess, options.time_step);
+    std::cout << "Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
 
   // Solve the optimzation problem
