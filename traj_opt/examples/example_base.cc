@@ -11,6 +11,7 @@
 #include "drake/traj_opt/examples/mpc_controller.h"
 #include "drake/traj_opt/examples/pd_plus_controller.h"
 #include "drake/visualization/visualization_config_functions.h"
+#include "drake/common/trajectories/piecewise_polynomial.h"
 
 namespace drake {
 namespace traj_opt {
@@ -24,6 +25,16 @@ using mpc::Interpolator;
 using mpc::ModelPredictiveController;
 using pd_plus::PdPlusController;
 using systems::DiscreteTimeDelay;
+using trajectories::PiecewisePolynomial;
+
+struct Demonstration {
+  std::vector<VectorXd> observations;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(DRAKE_NVP(observations));
+  }
+};
 
 void TrajOptExample::RunExample(const std::string options_file) const {
   // Load parameters from file
@@ -185,6 +196,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   auto [plant, scene_graph] = AddMultibodyPlant(config, &builder);
   CreatePlantModel(&plant);
   plant.Finalize();
+  const int nq = plant.num_positions();
   const int nv = plant.num_velocities();
 
   auto diagram = builder.Build();
@@ -201,9 +213,44 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   SolverParameters solver_params;
   SetSolverParameters(options, &solver_params);
 
-  // Establish an initial guess
-  std::vector<VectorXd> q_guess = MakeLinearInterpolation(
-      opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
+  std::vector<VectorXd> q_guess;
+  if (options.use_demonstration) {
+    // TODO: Support absolute path
+    const std::string demo_file = "drake/traj_opt/examples/demo.yaml";
+    // Load yaml file with initial guess
+    Demonstration data = yaml::LoadYamlFile<Demonstration>(
+        FindResourceOrThrow(demo_file));
+
+    std::vector<VectorXd> q_guess_tmp = data.observations;
+    // create a vector of input times with the same size as q_guess and delta = 0.01
+    std::vector<double> input_time(q_guess_tmp.size());
+    for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
+      input_time[i] = i * 0.01;
+    }
+    std::vector<double> opt_time_values(opt_prob.num_steps + 1);
+    for (int i = 0; i < options.num_steps + 1; i++) {
+      opt_time_values[i] = i * options.time_step;
+    }
+
+    std::vector<MatrixXd> q_knots(q_guess_tmp.size(), VectorXd(nq));
+    for (std::size_t i = 0; i < q_guess_tmp.size(); ++i) {
+      q_knots[i] = q_guess_tmp[i];
+    }
+
+    PiecewisePolynomial<double> traj = PiecewisePolynomial<double>::CubicWithContinuousSecondDerivatives(
+                  input_time, q_knots);
+    
+    for (int i = 0; i < options.num_steps + 1; i++) {
+      q_guess.push_back(traj.value(opt_time_values[i]));
+    }
+  }
+  else
+  {
+    // Establish an initial guess
+    q_guess = MakeLinearInterpolation(
+        opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
+    
+  }
   NormalizeQuaternions(plant, &q_guess);
 
   // N.B. This should always be the case, and is checked by the solver. However,
@@ -220,7 +267,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   }
   if (options.play_initial_guess) {
     PlayBackTrajectory(q_guess, options.time_step);
-    std::cout << "Press enter to continue..." << std::endl;
+    std::cout << "Playing guess now. Press enter to continue..." << std::endl;
     std::cin.ignore();
   }
 

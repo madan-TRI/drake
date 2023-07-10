@@ -202,6 +202,7 @@ drake_cc_binary(
     data = [
         ":toy_limb.yaml",
         ":models",
+        ":demo.yaml",
     ],
     test_rule_args = [],
     deps = [
