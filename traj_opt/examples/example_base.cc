@@ -11,6 +11,7 @@
 #include "drake/traj_opt/examples/mpc_controller.h"
 #include "drake/traj_opt/examples/pd_plus_controller.h"
 #include "drake/visualization/visualization_config_functions.h"
+#include "drake/common/trajectories/piecewise_polynomial.h"
 
 namespace drake {
 namespace traj_opt {
@@ -24,6 +25,16 @@ using mpc::Interpolator;
 using mpc::ModelPredictiveController;
 using pd_plus::PdPlusController;
 using systems::DiscreteTimeDelay;
+using trajectories::PiecewisePolynomial;
+
+struct Demonstration {
+  std::vector<VectorXd> observations;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(DRAKE_NVP(observations));
+  }
+};
 
 void TrajOptExample::RunExample(const std::string options_file) const {
   // Load parameters from file
@@ -185,6 +196,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   auto [plant, scene_graph] = AddMultibodyPlant(config, &builder);
   CreatePlantModel(&plant);
   plant.Finalize();
+  const int nq = plant.num_positions();
   const int nv = plant.num_velocities();
 
   auto diagram = builder.Build();
@@ -201,23 +213,62 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   SolverParameters solver_params;
   SetSolverParameters(options, &solver_params);
 
-  // Establish an initial guess
-  std::vector<VectorXd> q_guess = MakeLinearInterpolation(
-      opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
+  std::vector<VectorXd> q_guess;
+  if (options.use_demonstration) {
+    // TODO: Support absolute path
+    const std::string demo_file = "drake/traj_opt/examples/demo.yaml";
+    // Load yaml file with initial guess
+    Demonstration data = yaml::LoadYamlFile<Demonstration>(
+        FindResourceOrThrow(demo_file));
+
+    std::vector<VectorXd> q_guess_tmp = data.observations;
+    // create a vector of input times with the same size as q_guess and delta = 0.01
+    std::vector<double> input_time(q_guess_tmp.size());
+    for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
+      input_time[i] = i * 0.01;
+    }
+    std::vector<double> opt_time_values(opt_prob.num_steps + 1);
+    for (int i = 0; i < options.num_steps + 1; i++) {
+      opt_time_values[i] = i * options.time_step;
+    }
+
+    std::vector<MatrixXd> q_knots(q_guess_tmp.size(), VectorXd(nq));
+    for (std::size_t i = 0; i < q_guess_tmp.size(); ++i) {
+      q_knots[i] = q_guess_tmp[i];
+    }
+
+    PiecewisePolynomial<double> traj = PiecewisePolynomial<double>::CubicWithContinuousSecondDerivatives(
+                  input_time, q_knots);
+    
+    for (int i = 0; i < options.num_steps + 1; i++) {
+      q_guess.push_back(traj.value(opt_time_values[i]));
+    }
+  }
+  else
+  {
+    // Establish an initial guess
+    q_guess = MakeLinearInterpolation(
+        opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
+    
+  }
   NormalizeQuaternions(plant, &q_guess);
 
   // N.B. This should always be the case, and is checked by the solver. However,
   // sometimes floating point + normalization stuff makes q_guess != q_init, so
-  // we'll just doubly enforce that here
+  // we'll just doubly enforce that here]
   DRAKE_DEMAND((q_guess[0] - opt_prob.q_init).norm() < 1e-8);
   q_guess[0] = opt_prob.q_init;
 
   // Visualize the target trajectory and initial guess, if requested
   if (options.play_target_trajectory) {
     PlayBackTrajectory(opt_prob.q_nom, options.time_step);
+    std::cout << "Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
   if (options.play_initial_guess) {
     PlayBackTrajectory(q_guess, options.time_step);
+    std::cout << "Playing guess now. Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
 
   // Solve the optimzation problem
@@ -362,14 +413,20 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   opt_prob->q_init = options.q_init;
   opt_prob->v_init = options.v_init;
 
+  // Joint Position Limits
+  opt_prob->q_min = options.q_min;
+  opt_prob->q_max = options.q_max;
+
   // Cost weights
   opt_prob->Qq = options.Qq.asDiagonal();
   opt_prob->Qv = options.Qv.asDiagonal();
+  opt_prob->Qlq = options.Qlq.asDiagonal();
   opt_prob->Qf_q = options.Qfq.asDiagonal();
   opt_prob->Qf_v = options.Qfv.asDiagonal();
   opt_prob->R = options.R.asDiagonal();
 
   // Check which DoFs the cost is updated relative to the initial condition for
+  // Doubt (Rishabh)
   VectorX<bool> q_nom_relative = options.q_nom_relative_to_q_init;
   if (q_nom_relative.size() == 0) {
     // If not specified, assume the nominal trajectory is not relative to the
@@ -522,6 +579,7 @@ void TrajOptExample::SetSolverParameters(
   // Hessian rescaling
   solver_params->scaling = options.scaling;
 
+  // Doubt (Rishabh): what's the effect of different scaling methods?
   if (options.scaling_method == "sqrt") {
     solver_params->scaling_method = ScalingMethod::kSqrt;
   } else if (options.scaling_method == "adaptive_sqrt") {
