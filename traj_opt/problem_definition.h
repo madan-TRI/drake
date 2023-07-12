@@ -41,6 +41,10 @@ struct ProblemDefinition {
   // N.B. these weights are per unit of time
   MatrixXd Qv;
 
+  // Running cost coefficients for joint limit errors
+  // N.B. these weights are per unit of time
+  MatrixXd Qlq;
+
   // Terminal cost coefficients for generalized positions
   MatrixXd Qf_q;
 

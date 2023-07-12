@@ -414,11 +414,13 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   // Cost weights
   opt_prob->Qq = options.Qq.asDiagonal();
   opt_prob->Qv = options.Qv.asDiagonal();
+  opt_prob->Qlq = options.Qlq.asDiagonal();
   opt_prob->Qf_q = options.Qfq.asDiagonal();
   opt_prob->Qf_v = options.Qfv.asDiagonal();
   opt_prob->R = options.R.asDiagonal();
 
   // Check which DoFs the cost is updated relative to the initial condition for
+  // Doubt (Rishabh)
   VectorX<bool> q_nom_relative = options.q_nom_relative_to_q_init;
   if (q_nom_relative.size() == 0) {
     // If not specified, assume the nominal trajectory is not relative to the
@@ -571,6 +573,7 @@ void TrajOptExample::SetSolverParameters(
   // Hessian rescaling
   solver_params->scaling = options.scaling;
 
+  // Doubt (Rishabh): what's the effect of different scaling methods?
   if (options.scaling_method == "sqrt") {
     solver_params->scaling_method = ScalingMethod::kSqrt;
   } else if (options.scaling_method == "adaptive_sqrt") {
