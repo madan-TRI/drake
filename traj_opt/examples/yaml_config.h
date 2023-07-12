@@ -87,6 +87,7 @@ struct TrajOptExampleParams {
     a->Visit(DRAKE_NVP(save_mpc_result_as_static_html));
     a->Visit(DRAKE_NVP(static_html_filename));
     a->Visit(DRAKE_NVP(use_demonstration));
+    a->Visit(DRAKE_NVP(Qlq));
   }
   // Initial state
   VectorXd q_init;
@@ -104,6 +105,7 @@ struct TrajOptExampleParams {
   VectorXd Qq;
   VectorXd Qv;
   VectorXd R;
+  VectorXd Qlq;
 
   // Terminal cost weights (diagonal matrices)
   VectorXd Qfq;

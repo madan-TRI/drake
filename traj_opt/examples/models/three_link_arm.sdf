@@ -69,7 +69,7 @@
           <!-- <spring_stiffness>0.1</spring_stiffness> -->
         </dynamics>
       </axis>
-      <pose>0 0 -0.1 0 0 0</pose>
+      <pose>0 0 -0.075 0 0 0</pose>
     </joint>
 
     <link name="link2">
@@ -207,7 +207,7 @@
           <!-- <spring_stiffness>0.03</spring_stiffness> -->
         </dynamics>
       </axis>
-      <pose>0 0 -0.1 0 0 0</pose>
+      <pose>0 0 -0.075 0 0 0</pose>
     </joint>
   </model>
 </sdf>
