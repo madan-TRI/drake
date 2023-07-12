@@ -31,6 +31,10 @@ struct ProblemDefinition {
   // Initial generalized velocities
   VectorXd v_init;
 
+  // Joint Position Limits
+  VectorXd q_min;
+  VectorXd q_max;
+
   // Running cost coefficients for generalized positions
   // N.B. these weights are per unit of time
   // TODO(vincekurtz): consider storing these as VectorXd, assuming they are

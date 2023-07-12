@@ -88,10 +88,16 @@ struct TrajOptExampleParams {
     a->Visit(DRAKE_NVP(static_html_filename));
     a->Visit(DRAKE_NVP(use_demonstration));
     a->Visit(DRAKE_NVP(Qlq));
+    a->Visit(DRAKE_NVP(q_min));
+    a->Visit(DRAKE_NVP(q_max));
   }
   // Initial state
   VectorXd q_init;
   VectorXd v_init;
+
+  // Joint position limits
+  VectorXd q_min;
+  VectorXd q_max;
 
   // Nominal state at each timestep is defined by linear interpolation between
   // q_nom_start and q_nom_end
