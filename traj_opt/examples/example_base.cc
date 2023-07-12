@@ -255,7 +255,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
 
   // N.B. This should always be the case, and is checked by the solver. However,
   // sometimes floating point + normalization stuff makes q_guess != q_init, so
-  // we'll just doubly enforce that here
+  // we'll just doubly enforce that here]
   DRAKE_DEMAND((q_guess[0] - opt_prob.q_init).norm() < 1e-8);
   q_guess[0] = opt_prob.q_init;
 
@@ -412,6 +412,10 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   // Initial state
   opt_prob->q_init = options.q_init;
   opt_prob->v_init = options.v_init;
+
+  // Joint Position Limits
+  opt_prob->q_min = options.q_min;
+  opt_prob->q_max = options.q_max;
 
   // Cost weights
   opt_prob->Qq = options.Qq.asDiagonal();

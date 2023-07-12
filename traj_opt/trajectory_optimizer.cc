@@ -163,13 +163,9 @@ T TrajectoryOptimizer<T>::CalcCost(
   VectorX<T>& q_err = workspace->q_size_tmp1;
   VectorX<T>& v_err = workspace->v_size_tmp1;
 
-  VectorX<T>& q_low = workspace->q_size_tmp1;
-  VectorX<T>& q_high = workspace->q_size_tmp1;
+  // Joint limit error terms
   VectorX<T>& q_low_err = workspace->q_size_tmp1;
   VectorX<T>& q_high_err = workspace->q_size_tmp1;
-
-  q_low << -2, -0.01, -0.01, -5, -5;
-  q_high << 2, 0.01, 0.01, 5, 5;
 
   // Running cost
   for (int t = 0; t < num_steps(); ++t) {
@@ -180,9 +176,9 @@ T TrajectoryOptimizer<T>::CalcCost(
     cost += T(tau[t].transpose() * prob_.R * tau[t]);
 
     // add joint position limit cost
-    q_low_err = q_low - q[t];
+    q_low_err = prob_.q_min - q[t];
     q_low_err = q_low_err.cwiseMax(0);
-    q_high_err = q[t] - q_high;
+    q_high_err = q[t] - prob_.q_max;
     q_high_err = q_high_err.cwiseMax(0);
     cost += T(q_low_err.transpose() * prob_.Qlq * q_low_err);
     cost += T(q_high_err.transpose() * prob_.Qlq * q_high_err);
@@ -1233,12 +1229,6 @@ void TrajectoryOptimizer<T>::CalcGradient(
   VectorX<T>& taup_term = workspace->tau_size_tmp3;
   VectorX<T>& qlt_term = workspace->q_size_tmp1;
 
-  VectorX<T>& q_low = workspace->q_size_tmp1;
-  VectorX<T>& q_high = workspace->q_size_tmp1;
-
-  q_low << -2, -0.01, -0.01, -5, -5;
-  q_high << 2, 0.01, 0.01, 5, 5;
-
   for (int t = 1; t < num_steps(); ++t) {
     // Contribution from position cost
     qt_term = (q[t] - prob_.q_nom[t]).transpose() * 2 * prob_.Qq * dt;
@@ -1266,7 +1256,7 @@ void TrajectoryOptimizer<T>::CalcGradient(
     }
 
     // Contribution from joint limit cost
-    qlt_term = (q[t] - q_high).cwiseMax(0) * 2 * prob_.Qlq * dt - (q_low - q[t]).cwiseMax(0) * 2 * prob_.Qlq * dt;
+    qlt_term = (q[t] - prob_.q_max).cwiseMax(0) * 2 * prob_.Qlq * dt - (prob_.q_min - q[t]).cwiseMax(0) * 2 * prob_.Qlq * dt;
 
     // Put it all together to get the gradient w.r.t q[t]
     g->segment(t * nq, nq) =
@@ -1339,11 +1329,6 @@ void TrajectoryOptimizer<T>::CalcHessian(
   const std::vector<VectorX<T>>& q = state.q();
   TrajectoryOptimizerWorkspace<T>* workspace = &state.workspace;
   VectorX<T>& qlt_term = workspace->q_size_tmp1;
-  VectorX<T>& q_low = workspace->q_size_tmp1;
-  VectorX<T>& q_high = workspace->q_size_tmp1;
-
-  q_low << -2, -0.01, -0.01, -5, -5;
-  q_high << 2, 0.01, 0.01, 5, 5;
 
   // Fill in the non-zero blocks
   C[0].setIdentity();  // Initial condition q0 fixed at t=0
@@ -1361,8 +1346,8 @@ void TrajectoryOptimizer<T>::CalcHessian(
       dgt_dqt += dvt_dqm[t + 1].transpose() * Qf_v * dvt_dqm[t + 1];
     }
 
-    qlt_term = (q[t] - q_high).cwiseMax(0) * 2 * prob_.Qlq * dt - (q_low - q[t]).cwiseMax(0) * 2 * prob_.Qlq * dt;
-    // TODO: Improve this
+    qlt_term = (q[t] - prob_.q_max).cwiseMax(0) * 2 * prob_.Qlq * dt - (prob_.q_min - q[t]).cwiseMax(0) * 2 * prob_.Qlq * dt;
+    // TODO: Improve this computation
     for (int i = 0; i < qlt_term.size(); i++) {
       if (qlt_term[i] == 0) {
         qlt_term[i] = 0.0;
