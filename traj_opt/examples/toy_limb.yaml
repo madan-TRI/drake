@@ -1,6 +1,6 @@
 ##
 #
-# This file contains parameters for the acrobot swingup problem.
+# This file contains parameters for the toy limb repositioning problem.
 #
 ##
 
@@ -44,7 +44,7 @@ max_iters : 200             # maximum Gauss-Newton iterations
 method : "trust_region"     # solver method, {linesearch, trust_region}
 exact_hessian : false
 scaling : true
-scaling_method : "adaptive_double_sqrt"
+scaling_method : "double_sqrt"
 equality_constraints : true
 # normalize_quaternions : false
 num_threads : 8

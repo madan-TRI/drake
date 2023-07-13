@@ -1327,8 +1327,7 @@ void TrajectoryOptimizer<T>::CalcHessian(
   std::vector<MatrixX<T>>& C = H->mutable_C();  // diagonal
 
   const std::vector<VectorX<T>>& q = state.q();
-  TrajectoryOptimizerWorkspace<T>* workspace = &state.workspace;
-  VectorX<T>& qlt_term = workspace->q_size_tmp1;
+  VectorX<T> qlt_term = VectorX<T>::Zero(plant().num_positions());
 
   // Fill in the non-zero blocks
   C[0].setIdentity();  // Initial condition q0 fixed at t=0
@@ -1346,15 +1345,14 @@ void TrajectoryOptimizer<T>::CalcHessian(
       dgt_dqt += dvt_dqm[t + 1].transpose() * Qf_v * dvt_dqm[t + 1];
     }
 
+    // recalculate gradient term for joint limit violation cost to further compute the Hessian
     qlt_term = (q[t] - prob_.q_max).cwiseMax(0) * 2 * prob_.Qlq * dt - (prob_.q_min - q[t]).cwiseMax(0) * 2 * prob_.Qlq * dt;
     // TODO: Improve this computation
     for (int i = 0; i < qlt_term.size(); i++) {
-      if (qlt_term[i] == 0) {
-        qlt_term[i] = 0.0;
-      } else if (qlt_term[i] < 0) {
+      if (qlt_term[i] < 0) {
         qlt_term[i] = -2 * prob_.Qlq.diagonal()[i] * dt;
       }
-      else
+      else if (qlt_term[i] > 0)
       {
         qlt_term[i] = 2 * prob_.Qlq.diagonal()[i] * dt;
       }
