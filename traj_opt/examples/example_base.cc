@@ -212,6 +212,8 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   SetSolverParameters(options, &solver_params);
 
   std::vector<VectorXd> q_guess;
+  // If use_demonstration is true, load the demonstration from a yaml file
+  // Otherwise, use the linear interpolation between q_init and q_guess as the initial guess
   if (options.use_demonstration) {
     // TODO: Support absolute path
     const std::string demo_file = "drake/traj_opt/examples/demo.yaml";
@@ -221,6 +223,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
 
     std::vector<VectorXd> q_guess_tmp = data.observations;
     // create a vector of input times with the same size as q_guess and delta = 0.01
+    // TODO: Support arbitrary delta
     std::vector<double> input_time(q_guess_tmp.size());
     for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
       input_time[i] = i * 0.01;
@@ -244,7 +247,6 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   }
   else
   {
-    // Establish an initial guess
     q_guess = MakeLinearInterpolation(
         opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
     
