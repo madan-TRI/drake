@@ -47,6 +47,8 @@ struct TrajectoryOptimizerSolution {
 
   // Optimal sequence of generalized forces at each timestep
   std::vector<VectorX<T>> tau;
+
+  std::vector<VectorX<T>> contact_forces;
 };
 
 /**
@@ -176,7 +178,24 @@ struct TrajectoryOptimizerStats {
           dqH_norms[i], trust_ratios[i], gradient_norms[i], dL_dqs[i],
           h_norms[i], merits[i]);
     }
+    // Close the file
+    data_file.close();
+  }
 
+  void SaveForceData(std::string fname, std::vector<VectorX<T>>& contact_forces) const {
+    std::ofstream data_file;
+    data_file.open(fname);
+
+    data_file << "t, contact_force\n";
+    const int num_steps = contact_forces.size();
+    for (int i = 0; i < num_steps; ++i) {
+      auto avg_force = contact_forces[i].norm() / contact_forces[i].size();
+      // check if nan and set to 0
+      if (avg_force != avg_force) {
+        avg_force = 0;
+      }
+      data_file << fmt::format("{}, {}\n", i, avg_force);
+    }
     // Close the file
     data_file.close();
   }

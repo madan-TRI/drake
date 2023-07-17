@@ -115,7 +115,7 @@ struct TrajOptExampleParams {
   VectorXd Qv;
   VectorXd R;
   VectorXd Qlq;
-  VectorXd Qcf;
+  double Qcf;
 
   // Terminal cost weights (diagonal matrices)
   VectorXd Qfq;
