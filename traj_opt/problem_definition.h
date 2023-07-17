@@ -69,7 +69,7 @@ struct ProblemDefinition {
   int max_num_contacts;
 
   // Contact force cost coefficients
-  MatrixXd Qcf;
+  double Qcf;
 };
 
 }  // namespace traj_opt

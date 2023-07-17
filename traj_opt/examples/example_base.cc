@@ -12,6 +12,7 @@
 #include "drake/traj_opt/examples/pd_plus_controller.h"
 #include "drake/visualization/visualization_config_functions.h"
 #include "drake/common/trajectories/piecewise_polynomial.h"
+#include "drake/multibody/meshcat/contact_visualizer.h"
 
 namespace drake {
 namespace traj_opt {
@@ -79,6 +80,11 @@ void TrajOptExample::RunModelPredictiveControl(
   // Connect to the Meshcat visualizer
   auto& visualizer =
       MeshcatVisualizerd::AddToBuilder(&builder, scene_graph, meshcat_);
+  
+  multibody::meshcat::ContactVisualizerParams cparams;
+  cparams.newtons_per_meter = 60.0;
+  auto& contact = multibody::meshcat::ContactVisualizerd::AddToBuilder(
+      &builder, plant, meshcat_, std::move(cparams));
 
   // Create a system model for the controller
   DiagramBuilder<double> ctrl_builder;
@@ -184,6 +190,7 @@ void TrajOptExample::RunModelPredictiveControl(
 
   // Print profiling info
   std::cout << TableOfAverages() << std::endl;
+  contact.Delete();
 }
 
 TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
@@ -303,9 +310,23 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
       }
     }
   }
+
+  double contact_force_max = 0;
+  VectorXd abs_cf_t;
+  for (int t = 0; t < options.num_steps; ++t) {
+    abs_cf_t = solution.contact_forces[t];
+    for (int i = 0; i < abs_cf_t.size(); ++i) {
+      if (abs_cf_t(i) > contact_force_max) {
+        contact_force_max = abs_cf_t(i);
+      }
+    }
+  }
+
   std::cout << std::endl;
   std::cout << fmt::format("Max torques: {}", fmt_eigen(tau_max.transpose()))
             << std::endl;
+
+  std::cout << "Max contact force: " << contact_force_max << std::endl;
 
   // Report maximum actuated and unactuated torques
   // TODO(vincekurtz): deal with the fact that B is not well-defined for some
@@ -379,6 +400,11 @@ void TrajOptExample::PlayBackTrajectory(const std::vector<VectorXd>& q,
   auto& visualizer =
       MeshcatVisualizerd::AddToBuilder(&builder, scene_graph, meshcat_);
 
+  multibody::meshcat::ContactVisualizerParams cparams;
+  cparams.newtons_per_meter = 30.0;
+  auto& contact = multibody::meshcat::ContactVisualizerd::AddToBuilder(
+      &builder, plant, meshcat_, std::move(cparams));
+
   auto diagram = builder.Build();
   std::unique_ptr<systems::Context<double>> diagram_context =
       diagram->CreateDefaultContext();
@@ -405,6 +431,7 @@ void TrajOptExample::PlayBackTrajectory(const std::vector<VectorXd>& q,
   }
   visualizer.StopRecording();
   visualizer.PublishRecording();
+  contact.Delete();
 }
 
 void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
@@ -424,7 +451,7 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   opt_prob->Qq = options.Qq.asDiagonal();
   opt_prob->Qv = options.Qv.asDiagonal();
   opt_prob->Qlq = options.Qlq.asDiagonal();
-  opt_prob->Qcf = options.Qcf.asDiagonal();
+  opt_prob->Qcf = options.Qcf;
   opt_prob->Qf_q = options.Qfq.asDiagonal();
   opt_prob->Qf_v = options.Qfv.asDiagonal();
   opt_prob->R = options.R.asDiagonal();

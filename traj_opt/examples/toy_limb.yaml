@@ -32,23 +32,23 @@ q_min: [-0.15, -0.11, -0.5, -1, -1]
 q_max:  [0.15, 0.11, 0.5, 1, 1]
 
 # Joint limit cost weights
-Qlq : [0, 0, 0, 0, 0]
+Qlq : [1e2, 1e2, 1e2, 0, 0]
 # Qlq : [0, 0, 0, 0., 0.]
 
 # Contact force cost
-Qcf : [0.0]
+Qcf : 1e4
 
 # Problem definition parameters
 time_step : 0.1   # Discretization timestep (seconds)
 num_steps : 30     # number of timesteps
 
 # Solver parameter
-max_iters : 700            # maximum Gauss-Newton iterations
+max_iters : 300            # maximum Gauss-Newton iterations
 method : "trust_region"     # solver method, {linesearch, trust_region}
 exact_hessian : false
 scaling : true
 scaling_method : "adaptive_sqrt"
-equality_constraints : true
+equality_constraints : false
 normalize_quaternions : true
 num_threads : 8
 

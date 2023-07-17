@@ -323,6 +323,7 @@ drake_cc_library(
     deps = [
         "//common/trajectories:piecewise_polynomial",
         "//multibody/plant",
+        "//multibody/meshcat:contact_visualizer",
         "//systems/framework:diagram",
         "//systems/framework:leaf_system",
         "//systems/framework:vector",
