@@ -136,7 +136,8 @@ T TrajectoryOptimizer<T>::CalcCost(
   INSTRUMENT_FUNCTION("Computes the total cost.");
   const std::vector<VectorX<T>>& v = EvalV(state);
   const std::vector<VectorX<T>>& tau = EvalTau(state);
-  T cost = CalcCost(state.q(), v, tau, &state.workspace);
+  const std::vector<VectorX<T>>& contact_forces = state.cache().inverse_dynamics_cache.contact_forces;
+  T cost = CalcCost(state.q(), v, tau, contact_forces, &state.workspace);
 
   // Add a proximal operator term to the cost, if requested
   if (params_.proximal_operator) {
@@ -158,11 +159,16 @@ template <typename T>
 T TrajectoryOptimizer<T>::CalcCost(
     const std::vector<VectorX<T>>& q, const std::vector<VectorX<T>>& v,
     const std::vector<VectorX<T>>& tau,
+    const std::vector<VectorX<T>>& contact_forces,
     TrajectoryOptimizerWorkspace<T>* workspace) const {
   T cost = 0;
   VectorX<T>& q_err = workspace->q_size_tmp1;
   VectorX<T>& v_err = workspace->v_size_tmp1;
+  for (int i = 0; i < num_steps(); i++)
+  {
+    std::cout << "Step: " << i << " Contact forces: " << contact_forces[i].size() << std::endl;
 
+  }
   // Joint limit error terms
   VectorX<T>& q_low_err = workspace->q_size_tmp1;
   VectorX<T>& q_high_err = workspace->q_size_tmp1;
@@ -174,7 +180,7 @@ T TrajectoryOptimizer<T>::CalcCost(
     cost += T(q_err.transpose() * prob_.Qq * q_err);
     cost += T(v_err.transpose() * prob_.Qv * v_err);
     cost += T(tau[t].transpose() * prob_.R * tau[t]);
-
+    
     // add joint position limit cost
     q_low_err = prob_.q_min - q[t];
     q_low_err = q_low_err.cwiseMax(0);
@@ -182,6 +188,9 @@ T TrajectoryOptimizer<T>::CalcCost(
     q_high_err = q_high_err.cwiseMax(0);
     cost += T(q_low_err.transpose() * prob_.Qlq * q_low_err);
     cost += T(q_high_err.transpose() * prob_.Qlq * q_high_err);
+
+    // TODO(rishabh): use weights from yaml file
+    cost += T(contact_forces[t].transpose() * prob_.Qcf * contact_forces[t]);
   }
 
   // Scale running cost by dt (so the optimization problem we're solving doesn't
@@ -226,7 +235,7 @@ void TrajectoryOptimizer<T>::CalcAccelerations(
 template <typename T>
 void TrajectoryOptimizer<T>::CalcInverseDynamics(
     const TrajectoryOptimizerState<T>& state, const std::vector<VectorX<T>>& a,
-    std::vector<VectorX<T>>* tau) const {
+    std::vector<VectorX<T>>* tau, std::vector<VectorX<T>>* contact_forces) const {
   // Generalized forces aren't defined for the last timestep
   // TODO(vincekurtz): additional checks that q_t, v_t, tau_t are the right size
   // for the plant?
@@ -243,14 +252,15 @@ void TrajectoryOptimizer<T>::CalcInverseDynamics(
     // All dynamics terms are treated implicitly, i.e.,
     // tau[t] = M(q[t+1]) * a[t] - k(q[t+1],v[t+1]) - f_ext[t+1]
     CalcInverseDynamicsSingleTimeStep(context_tp, a[t], &workspace,
-                                      &tau->at(t));
+                                      &tau->at(t), &contact_forces->at(t));
   }
 }
 
 template <typename T>
 void TrajectoryOptimizer<T>::CalcInverseDynamicsSingleTimeStep(
     const Context<T>& context, const VectorX<T>& a,
-    TrajectoryOptimizerWorkspace<T>* workspace, VectorX<T>* tau) const {
+    TrajectoryOptimizerWorkspace<T>* workspace, VectorX<T>* tau,
+    VectorX<T>* contact_forces) const {
   plant().CalcForceElementsContribution(context, &workspace->f_ext);
 
   // Add in contact force contribution to f_ext
@@ -259,7 +269,7 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsSingleTimeStep(
     // TODO(vincekurtz): perform this check earlier, and maybe print some
     // warnings to stdout if we're not connected (we do want to be able to run
     // problems w/o contact sometimes)
-    CalcContactForceContribution(context, &workspace->f_ext);
+    *contact_forces = CalcContactForceContribution(context, &workspace->f_ext);
   }
 
   // Inverse dynamics computes tau = M*a - k(q,v) - f_ext
@@ -267,7 +277,7 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsSingleTimeStep(
 }
 
 template <typename T>
-void TrajectoryOptimizer<T>::CalcContactForceContribution(
+VectorX<T> TrajectoryOptimizer<T>::CalcContactForceContribution(
     const Context<T>& context, MultibodyForces<T>* forces) const {
   using std::abs;
   using std::exp;
@@ -299,10 +309,22 @@ void TrajectoryOptimizer<T>::CalcContactForceContribution(
       query_object.inspector();
   const std::vector<SignedDistancePair<T>>& signed_distance_pairs =
       query_object.ComputeSignedDistancePairwiseClosestPoints(threshold);
-
+  
+  int num_contacts = 0;
   for (const SignedDistancePair<T>& pair : signed_distance_pairs) {
+    if (pair.distance < 0) {
+      num_contacts++;
+    }
+  }
+  
+  // TODO(rishabh): maybe log force vectors instead?
+  VectorX<T> contact_forces(num_contacts);
+  int contact_index = 0;
+  for (std::size_t i = 0; i < signed_distance_pairs.size(); ++i) {
+    const SignedDistancePair<T>& pair = signed_distance_pairs[i];
     // Normal outwards from A.
     const Vector3<T> nhat = -pair.nhat_BA_W;
+    // std::cout << "Pair number: " << i << " nhat: " << nhat.value() << std::endl;
 
     // Get geometry and transformation data for the witness points
     const GeometryId geometryA_id = pair.id_A;
@@ -381,6 +403,11 @@ void TrajectoryOptimizer<T>::CalcContactForceContribution(
       compliant_fn = sigma * k * log(1 + exp(exponent));
     }
     const T fn = compliant_fn * dissipation_factor;
+    // TODO(): check if this is correct later.
+    if (pair.distance < 0) {
+      contact_forces[contact_index] = fn;
+      contact_index++;
+    }
 
     // Tangential frictional component.
     // N.B. This model is algebraically equivalent to:
@@ -406,6 +433,7 @@ void TrajectoryOptimizer<T>::CalcContactForceContribution(
     forces->mutable_body_forces()[bodyA.node_index()] += F_AAo_W;
     forces->mutable_body_forces()[bodyB.node_index()] += F_BBo_W;
   }
+  return contact_forces;
 }
 
 template <typename T>
@@ -433,7 +461,7 @@ TrajectoryOptimizer<T>::EvalSignedDistancePairs(
   if (!state.cache().sdf_data.up_to_date) {
     CalcSdfData(state, &state.mutable_cache().sdf_data);
   }
-  return state.cache().sdf_data.sdf_pairs[t];
+    return state.cache().sdf_data.sdf_pairs[t];
 }
 
 template <typename T>
@@ -615,11 +643,15 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsFiniteDiff(
   const std::vector<VectorX<T>>& v = EvalV(state);
   const std::vector<VectorX<T>>& a = EvalA(state);
   const std::vector<VectorX<T>>& tau = EvalTau(state);
+  const std::vector<VectorX<T>>& contact_forces = state.cache().inverse_dynamics_cache.contact_forces;
 
   // Get references to the partials that we'll be setting
   std::vector<MatrixX<T>>& dtau_dqm = id_partials->dtau_dqm;
   std::vector<MatrixX<T>>& dtau_dqt = id_partials->dtau_dqt;
   std::vector<MatrixX<T>>& dtau_dqp = id_partials->dtau_dqp;
+  // std::vector<MatrixX<T>>& df_dqm = id_partials->df_dqm;
+  std::vector<MatrixX<T>>& df_dqt = id_partials->df_dqt;
+  std::vector<MatrixX<T>>& df_dqp = id_partials->df_dqp;
 
   // Get kinematic mapping matrices for each time step
   const std::vector<MatrixX<T>>& Nplus = EvalNplus(state);
@@ -652,7 +684,20 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsFiniteDiff(
     VectorX<T>& a_eps_tm = workspace.a_size_tmp1;
     VectorX<T>& a_eps_t = workspace.a_size_tmp2;
     VectorX<T>& tau_eps_tm = workspace.tau_size_tmp1;
-    VectorX<T>& tau_eps_t = workspace.tau_size_tmp2;
+    VectorX<T>& tau_eps_t = workspace.tau_size_tmp2; 
+    // Vector of contact forces
+    VectorX<T> contact_forces_eps_tm_tmp(contact_forces[t-1].size());
+    VectorX<T> contact_forces_eps_t_tmp(contact_forces[t].size());
+    // if (t < num_steps() - 1) {
+    //   VectorX<T> contact_forces_eps_tp_tmp(contact_forces[t+1].size());
+    //   VectorX<T>& contact_forces_eps_tp = contact_forces_eps_tp_tmp;
+    // }
+    // contact_forces_tmp.resize(contact_forces[t].size());
+    VectorX<T>& contact_forces_eps_tm = contact_forces_eps_tm_tmp;
+    VectorX<T>& contact_forces_eps_t = contact_forces_eps_t_tmp;
+    // resize contact forces
+    // contact_forces_eps_tm.resize(contact_forces[t-1].size());
+    // contact_forces_eps_t.resize(contact_forces[t].size());
 
     // Mass matrix, for analytical computation of dtau[t+1]/dq[t]
     MatrixX<T>& M = workspace.mass_matrix_size_tmp;
@@ -705,16 +750,26 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsFiniteDiff(
       plant().SetPositions(&context_t, q_eps_t);
       plant().SetVelocities(&context_t, v_eps_t);
       CalcInverseDynamicsSingleTimeStep(context_t, a_eps_tm, &workspace,
-                                        &tau_eps_tm);
+                                        &tau_eps_tm, &contact_forces_eps_tm);
       dtau_dqp[t - 1].col(i) = (tau_eps_tm - tau[t - 1]) / dq_i;
+      std::cout << "time step: " << t-1 << std::endl;
+      std::cout << "contact_forces_eps_tm size: " << contact_forces_eps_tm.size() << std::endl;
+      std::cout << "contact_forces[t-1] size: " << contact_forces[t-1].size() << std::endl;
+      // note: currently only computing if contact forces are nonzero
+      // this assumes contact_forces_eps_tm and contact_forces[t-1] are the same size
+      // but this might not be true everytime
+      if (contact_forces_eps_tm.size() > 0)
+        df_dqp[t - 1].col(i) = (contact_forces_eps_tm - contact_forces[t - 1]) / dq_i;
 
       // tau[t] = ID(q[t+1], v[t+1], a[t])
       if (t < num_steps()) {
         plant().SetPositions(&context_t, q[t + 1]);
         plant().SetVelocities(&context_t, v_eps_tp);
         CalcInverseDynamicsSingleTimeStep(context_t, a_eps_t, &workspace,
-                                          &tau_eps_t);
+                                          &tau_eps_t, &contact_forces_eps_t);
         dtau_dqt[t].col(i) = (tau_eps_t - tau[t]) / dq_i;
+        if (contact_forces_eps_t.size() > 0)
+          df_dqt[t].col(i) = (contact_forces_eps_t - contact_forces[t]) / dq_i;
       }
 
       // Unperturb q_t[i], v_t[i], and a_t[i]
@@ -725,6 +780,12 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsFiniteDiff(
         v_eps_tp = v[t + 1];
         a_eps_t = a[t];
       }
+
+      // if (t < num_steps() - 1) {
+      //   plant().SetPositions(&context_t, q[t + 2]);
+      //   plant().SetVelocities(&context_t, v[t + 2]);
+      //   // TODO(rishabh): get derivative for t+1
+      // } 
     }
 
     // tau[t+1] = ID(q[t+2], v[t+2], a[t+1])
@@ -736,7 +797,8 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsFiniteDiff(
       plant().SetVelocities(&context_t, v[t + 2]);
       plant().CalcMassMatrix(context_t, &M);
       dtau_dqm[t + 1] = 1 / time_step() / time_step() * M * Nplus[t + 1];
-    }
+      // TODO(rishabh): get derivative for t+1
+    } 
   }
 }
 
@@ -832,6 +894,8 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsWrtQtCentralDiff(
   VectorX<T>& tau_em_tp = workspace.tau_size_tmp10;
   VectorX<T>& tau_ep_tp = workspace.tau_size_tmp11;
   VectorX<T>& tau_epp_tp = workspace.tau_size_tmp12;
+
+  VectorX<T>& contact_forces_tmp = workspace.q_size_tmp1;
 
   // Get the trajectory data
   const std::vector<VectorX<T>>& q = state.q();
@@ -943,20 +1007,20 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsWrtQtCentralDiff(
       plant().SetPositions(context_, q_em_t);
       plant().SetVelocities(context_, v_em_t);
       CalcInverseDynamicsSingleTimeStep(*context_, a_em_tm, &workspace,
-                                        &tau_em_tm);
+                                        &tau_em_tm, &contact_forces_tmp);
       plant().SetPositions(context_, q_ep_t);
       plant().SetVelocities(context_, v_ep_t);
       CalcInverseDynamicsSingleTimeStep(*context_, a_ep_tm, &workspace,
-                                        &tau_ep_tm);
+                                        &tau_ep_tm, &contact_forces_tmp);
       if (fourth_order) {
         plant().SetPositions(context_, q_emm_t);
         plant().SetVelocities(context_, v_emm_t);
         CalcInverseDynamicsSingleTimeStep(*context_, a_emm_tm, &workspace,
-                                          &tau_emm_tm);
+                                          &tau_emm_tm, &contact_forces_tmp);
         plant().SetPositions(context_, q_epp_t);
         plant().SetVelocities(context_, v_epp_t);
         CalcInverseDynamicsSingleTimeStep(*context_, a_epp_tm, &workspace,
-                                          &tau_epp_tm);
+                                          &tau_epp_tm, &contact_forces_tmp);
         dtaum_dqt->col(i) = 2.0 / 3.0 * (tau_ep_tm - tau_em_tm) / dq -
                             1.0 / 12.0 * (tau_epp_tm - tau_emm_tm) / dq;
       } else {
@@ -968,22 +1032,22 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsWrtQtCentralDiff(
       plant().SetPositions(context_, q[t + 1]);
       plant().SetVelocities(context_, v_ep_tp);
       CalcInverseDynamicsSingleTimeStep(*context_, a_ep_t, &workspace,
-                                        &tau_ep_t);
+                                        &tau_ep_t, &contact_forces_tmp);
 
       plant().SetPositions(context_, q[t + 1]);
       plant().SetVelocities(context_, v_em_tp);
       CalcInverseDynamicsSingleTimeStep(*context_, a_em_t, &workspace,
-                                        &tau_em_t);
+                                        &tau_em_t, &contact_forces_tmp);
       if (fourth_order) {
         plant().SetPositions(context_, q[t + 1]);
         plant().SetVelocities(context_, v_epp_tp);
         CalcInverseDynamicsSingleTimeStep(*context_, a_epp_t, &workspace,
-                                          &tau_epp_t);
+                                          &tau_epp_t, &contact_forces_tmp);
 
         plant().SetPositions(context_, q[t + 1]);
         plant().SetVelocities(context_, v_emm_tp);
         CalcInverseDynamicsSingleTimeStep(*context_, a_emm_t, &workspace,
-                                          &tau_emm_t);
+                                          &tau_emm_t, &contact_forces_tmp);
         dtaut_dqt->col(i) = 2.0 / 3.0 * (tau_ep_t - tau_em_t) / dq -
                             1.0 / 12.0 * (tau_epp_t - tau_emm_t) / dq;
       } else {
@@ -995,20 +1059,20 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsWrtQtCentralDiff(
       plant().SetPositions(context_, q[t + 2]);
       plant().SetVelocities(context_, v[t + 2]);
       CalcInverseDynamicsSingleTimeStep(*context_, a_em_tp, &workspace,
-                                        &tau_em_tp);
+                                        &tau_em_tp, &contact_forces_tmp);
       plant().SetPositions(context_, q[t + 2]);
       plant().SetVelocities(context_, v[t + 2]);
       CalcInverseDynamicsSingleTimeStep(*context_, a_ep_tp, &workspace,
-                                        &tau_ep_tp);
+                                        &tau_ep_tp, &contact_forces_tmp);
       if (fourth_order) {
         plant().SetPositions(context_, q[t + 2]);
         plant().SetVelocities(context_, v[t + 2]);
         CalcInverseDynamicsSingleTimeStep(*context_, a_emm_tp, &workspace,
-                                          &tau_emm_tp);
+                                          &tau_emm_tp, &contact_forces_tmp);
         plant().SetPositions(context_, q[t + 2]);
         plant().SetVelocities(context_, v[t + 2]);
         CalcInverseDynamicsSingleTimeStep(*context_, a_epp_tp, &workspace,
-                                          &tau_epp_tp);
+                                          &tau_epp_tp, &contact_forces_tmp);
         dtaup_dqt->col(i) = 2.0 / 3.0 * (tau_ep_tp - tau_em_tp) / dq -
                             1.0 / 12.0 * (tau_epp_tp - tau_emm_tp) / dq;
       } else {
@@ -1077,6 +1141,8 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsAutoDiff(
   std::vector<MatrixX<double>>& dtau_dqm = id_partials->dtau_dqm;
   std::vector<MatrixX<double>>& dtau_dqt = id_partials->dtau_dqt;
   std::vector<MatrixX<double>>& dtau_dqp = id_partials->dtau_dqp;
+  // TODO(rishabh): specify the correct shape. should be based on number of sdf pairs.
+  VectorX<AutoDiffXd> contact_force(plant().num_velocities());
 
   // Heap allocations.
   std::vector<VectorX<AutoDiffXd>> q_ad(num_steps() + 1);
@@ -1105,12 +1171,13 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsAutoDiff(
     const std::vector<VectorX<AutoDiffXd>>& a_ad =
         optimizer_ad_->EvalA(*state_ad_);
 
+
     // dtau_dqt[t].
     if (t < num_steps()) {
       const Context<AutoDiffXd>& context_ad_tp =
           optimizer_ad_->EvalPlantContext(*state_ad_, t + 1);
       optimizer_ad_->CalcInverseDynamicsSingleTimeStep(context_ad_tp, a_ad[t],
-                                                       &workspace_ad, &tau_ad);
+                                                       &workspace_ad, &tau_ad, &contact_force);
       dtau_dqt[t] = math::ExtractGradient(tau_ad);
     }
 
@@ -1119,7 +1186,7 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsAutoDiff(
       const Context<AutoDiffXd>& context_ad_tpp =
           optimizer_ad_->EvalPlantContext(*state_ad_, t + 2);
       optimizer_ad_->CalcInverseDynamicsSingleTimeStep(
-          context_ad_tpp, a_ad[t + 1], &workspace_ad, &tau_ad);
+          context_ad_tpp, a_ad[t + 1], &workspace_ad, &tau_ad, &contact_force);
       dtau_dqm[t + 1] = math::ExtractGradient(tau_ad);
     }
 
@@ -1128,7 +1195,7 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsAutoDiff(
       const Context<AutoDiffXd>& context_ad_t =
           optimizer_ad_->EvalPlantContext(*state_ad_, t);
       optimizer_ad_->CalcInverseDynamicsSingleTimeStep(
-          context_ad_t, a_ad[t - 1], &workspace_ad, &tau_ad);
+          context_ad_t, a_ad[t - 1], &workspace_ad, &tau_ad, &contact_force);
       dtau_dqp[t - 1] = math::ExtractGradient(tau_ad);
     }
 
@@ -1197,8 +1264,10 @@ void TrajectoryOptimizer<T>::CalcGradientFiniteDiff(
 
 template <typename T>
 void TrajectoryOptimizer<T>::CalcGradient(
-    const TrajectoryOptimizerState<T>& state, EigenPtr<VectorX<T>> g) const {
+    const TrajectoryOptimizerState<T>& state, EigenPtr<VectorX<T>> g,
+    std::vector<VectorX<T>>& contact_forces) const {
   INSTRUMENT_FUNCTION("Assembly of the gradient.");
+  std::cout << "contact_forces.size() = " << contact_forces.size() << std::endl;
   const double dt = time_step();
   const int nq = plant().num_positions();
   TrajectoryOptimizerWorkspace<T>* workspace = &state.workspace;
@@ -1215,6 +1284,8 @@ void TrajectoryOptimizer<T>::CalcGradient(
   const std::vector<MatrixX<T>>& dtau_dqp = id_partials.dtau_dqp;
   const std::vector<MatrixX<T>>& dtau_dqt = id_partials.dtau_dqt;
   const std::vector<MatrixX<T>>& dtau_dqm = id_partials.dtau_dqm;
+  const std::vector<MatrixX<T>>& df_dqp = id_partials.df_dqp;
+  const std::vector<MatrixX<T>>& df_dqt = id_partials.df_dqt;
 
   // Set first block of g (derivatives w.r.t. q_0) to zero, since q0 = q_init
   // are constant.
@@ -1228,6 +1299,8 @@ void TrajectoryOptimizer<T>::CalcGradient(
   VectorX<T>& taut_term = workspace->tau_size_tmp2;
   VectorX<T>& taup_term = workspace->tau_size_tmp3;
   VectorX<T>& qlt_term = workspace->q_size_tmp1;
+  VectorX<T>& fm_term = workspace->q_size_tmp1;
+  VectorX<T>& ft_term = workspace->q_size_tmp2;
 
   for (int t = 1; t < num_steps(); ++t) {
     // Contribution from position cost
@@ -1249,7 +1322,7 @@ void TrajectoryOptimizer<T>::CalcGradient(
     taum_term = tau[t - 1].transpose() * 2 * prob_.R * dt * dtau_dqp[t - 1];
     taut_term = tau[t].transpose() * 2 * prob_.R * dt * dtau_dqt[t];
     if (t == num_steps() - 1) {
-      // There is no constrol input at the final timestep
+      // There is no control input at the final timestep
       taup_term.setZero(nq);
     } else {
       taup_term = tau[t + 1].transpose() * 2 * prob_.R * dt * dtau_dqm[t + 1];
@@ -1258,11 +1331,30 @@ void TrajectoryOptimizer<T>::CalcGradient(
     // Contribution from joint limit cost
     qlt_term = (q[t] - prob_.q_max).cwiseMax(0) * 2 * prob_.Qlq * dt - (prob_.q_min - q[t]).cwiseMax(0) * 2 * prob_.Qlq * dt;
 
+    // TODO(rishabh): add contribution from contact force cost
+    // use weights from yaml file
+    // TODO(rishabh): calculating the fp_term
+    if (contact_forces[t-1].size() > 0)
+      fm_term = contact_forces[t - 1] * 2 * prob_.Qcf * dt * df_dqp[t - 1];
+    else
+      fm_term.setZero(nq);
+    
+    if (contact_forces[t].size() > 0)
+      ft_term = contact_forces[t].transpose() * 2 * prob_.Qcf * dt * df_dqt[t];
+    else
+      ft_term.setZero(nq);
+    // if (t == num_steps() - 1) {
+    //   fp_term.setZero(nq);
+    // } else {
+    //   fp_term = 2 * contact_forces[t+1].transpose() * dt * df_dqp[t-1];
+    // }
+
     // Put it all together to get the gradient w.r.t q[t]
     g->segment(t * nq, nq) =
-        qt_term + vt_term + vp_term + taum_term + taut_term + taup_term + qlt_term;
+        qt_term + vt_term + vp_term + taum_term + taut_term + taup_term + qlt_term + fm_term + ft_term;
   }
 
+  // TODO: check if we need to do something for the last timestep
   // Last step is different, because there is terminal cost and v[t+1] doesn't
   // exist
   taum_term = tau[num_steps() - 1].transpose() * 2 * prob_.R * dt *
@@ -1290,7 +1382,7 @@ template <typename T>
 const VectorX<T>& TrajectoryOptimizer<T>::EvalGradient(
     const TrajectoryOptimizerState<T>& state) const {
   if (!state.cache().gradient_up_to_date) {
-    CalcGradient(state, &state.mutable_cache().gradient);
+    CalcGradient(state, &state.mutable_cache().gradient, state.mutable_cache().inverse_dynamics_cache.contact_forces);
     state.mutable_cache().gradient_up_to_date = true;
   }
   return state.cache().gradient;
@@ -1298,11 +1390,14 @@ const VectorX<T>& TrajectoryOptimizer<T>::EvalGradient(
 
 template <typename T>
 void TrajectoryOptimizer<T>::CalcHessian(
-    const TrajectoryOptimizerState<T>& state, PentaDiagonalMatrix<T>* H) const {
+    const TrajectoryOptimizerState<T>& state, PentaDiagonalMatrix<T>* H,
+    std::vector<VectorX<T>>& contact_forces) const {
   DRAKE_DEMAND(H->is_symmetric());
   DRAKE_DEMAND(H->block_rows() == num_steps() + 1);
   DRAKE_DEMAND(H->block_size() == plant().num_positions());
   INSTRUMENT_FUNCTION("Assembly of the Hessian.");
+
+  std::cout << "contact_forces size: " << contact_forces.size() << std::endl;
 
   // Some convienient aliases
   const double dt = time_step();
@@ -1320,6 +1415,8 @@ void TrajectoryOptimizer<T>::CalcHessian(
   const std::vector<MatrixX<T>>& dtau_dqp = id_partials.dtau_dqp;
   const std::vector<MatrixX<T>>& dtau_dqt = id_partials.dtau_dqt;
   const std::vector<MatrixX<T>>& dtau_dqm = id_partials.dtau_dqm;
+  const std::vector<MatrixX<T>>& df_dqp = id_partials.df_dqp;
+  const std::vector<MatrixX<T>>& df_dqt = id_partials.df_dqt;
 
   // Get mutable references to the non-zero bands of the Hessian
   std::vector<MatrixX<T>>& A = H->mutable_A();  // 2 rows below diagonal
@@ -1334,9 +1431,16 @@ void TrajectoryOptimizer<T>::CalcHessian(
   for (int t = 1; t < num_steps(); ++t) {
     // dg_t/dq_t
     MatrixX<T>& dgt_dqt = C[t];
+    std::cout << "hess shape: " << dgt_dqt.rows() << " " << dgt_dqt.cols() << std::endl;
     dgt_dqt = Qq;
     dgt_dqt += dvt_dqt[t].transpose() * Qv * dvt_dqt[t];
     dgt_dqt += dtau_dqp[t - 1].transpose() * R * dtau_dqp[t - 1];
+    // contact forces term
+    // TODO(rishabh): same as CalcGradient, figure out use of df_dqm and final timestep calculation
+    // if (contact_)
+    dgt_dqt += df_dqp[t - 1].transpose() * 0.001 * df_dqp[t - 1];
+    dgt_dqt += df_dqt[t].transpose() * 0.001 * df_dqt[t];
+
     dgt_dqt += dtau_dqt[t].transpose() * R * dtau_dqt[t];
     if (t < num_steps() - 1) {
       dgt_dqt += dtau_dqm[t + 1].transpose() * R * dtau_dqm[t + 1];
@@ -1347,7 +1451,7 @@ void TrajectoryOptimizer<T>::CalcHessian(
 
     // recalculate gradient term for joint limit violation cost to further compute the Hessian
     qlt_term = (q[t] - prob_.q_max).cwiseMax(0) * 2 * prob_.Qlq * dt - (prob_.q_min - q[t]).cwiseMax(0) * 2 * prob_.Qlq * dt;
-    // TODO: Improve this computation
+    // TODO (rishabh): Improve this computation
     for (int i = 0; i < qlt_term.size(); i++) {
       if (qlt_term[i] < 0) {
         qlt_term[i] = -2 * prob_.Qlq.diagonal()[i] * dt;
@@ -1362,6 +1466,7 @@ void TrajectoryOptimizer<T>::CalcHessian(
     // dg_t/dq_{t+1}
     MatrixX<T>& dgt_dqp = B[t + 1];
     dgt_dqp = dtau_dqp[t].transpose() * R * dtau_dqt[t];
+    dgt_dqp += df_dqp[t].transpose() * 0.001 * df_dqt[t];
     if (t < num_steps() - 1) {
       dgt_dqp += dtau_dqt[t + 1].transpose() * R * dtau_dqm[t + 1];
       dgt_dqp += dvt_dqt[t + 1].transpose() * Qv * dvt_dqm[t + 1];
@@ -1377,12 +1482,12 @@ void TrajectoryOptimizer<T>::CalcHessian(
   }
 
   // dg_t/dq_t for the final timestep
+  // TODO(rishabh): final timestep cost for force constraint
   MatrixX<T>& dgT_dqT = C[num_steps()];
   dgT_dqT = Qf_q;
   dgT_dqT += dvt_dqt[num_steps()].transpose() * Qf_v * dvt_dqt[num_steps()];
   dgT_dqT +=
       dtau_dqp[num_steps() - 1].transpose() * R * dtau_dqp[num_steps() - 1];
-
   // Add proximal operator terms to the Hessian, if requested
   if (params_.proximal_operator) {
     for (int t = 0; t <= num_steps(); ++t) {
@@ -1402,7 +1507,7 @@ const PentaDiagonalMatrix<T>& TrajectoryOptimizer<T>::EvalHessian(
     if (params_.exact_hessian) {
       CalcExactHessian(state, &state.mutable_cache().hessian);
     } else {
-      CalcHessian(state, &state.mutable_cache().hessian);
+      CalcHessian(state, &state.mutable_cache().hessian, state.mutable_cache().inverse_dynamics_cache.contact_forces);
     }
     state.mutable_cache().hessian_up_to_date = true;
   }
@@ -1740,7 +1845,7 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsCache(
     typename TrajectoryOptimizerCache<T>::InverseDynamicsCache* cache) const {
   // Compute corresponding generalized torques
   const std::vector<VectorX<T>>& a = EvalA(state);
-  CalcInverseDynamics(state, a, &cache->tau);
+  CalcInverseDynamics(state, a, &cache->tau, &cache->contact_forces);
 
   // Set cache invalidation flag
   cache->up_to_date = true;
@@ -2413,6 +2518,8 @@ bool TrajectoryOptimizer<double>::CalcDoglegPoint(
   //    δq = pU + s( pH − pU ).
   //
   // Note that we normalize by Δ to minimize roundoff error.
+  std::cout << "pH.norm() = " << pH.norm() << std::endl;
+  std::cout << "pU.norm() = " << pU.norm() << std::endl;
   const double a = (pH - pU).dot(pH - pU);
   const double b = 2 * pU.dot(pH - pU);
   const double c = pU.dot(pU) - 1.0;
@@ -2767,15 +2874,15 @@ SolverFlag TrajectoryOptimizer<double>::SolveFromWarmStart(
 
     // With a positive definite Hessian, steps should not oppose the descent
     // direction
-    if (!params_.exact_hessian) {
-      DRAKE_DEMAND(dL_dq < std::numeric_limits<double>::epsilon());
-    } else {
-      // Reduce the trust region and reject the step if this is not a descent
-      // direction
-      if (dq.transpose() * g >= 0) {
-        rho = -1.0;
-      }
-    }
+    // if (!params_.exact_hessian) {
+    //   DRAKE_DEMAND(dL_dq < std::numeric_limits<double>::epsilon());
+    // } else {
+    //   // Reduce the trust region and reject the step if this is not a descent
+    //   // direction
+    //   if (dq.transpose() * g >= 0) {
+    //     rho = -1.0;
+    //   }
+    // }
 
     // Save data related to our quadratic approximation (for the first two
     // variables)

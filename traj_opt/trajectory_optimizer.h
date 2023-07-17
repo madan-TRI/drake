@@ -68,6 +68,8 @@ class TrajectoryOptimizer {
    */
   int num_steps() const { return prob_.num_steps; }
 
+  int max_num_contacts() const { return prob_.max_num_contacts; }
+
   /**
    * Return indices of the unactuated degrees of freedom in the model.
    *
@@ -123,7 +125,8 @@ class TrajectoryOptimizer {
    *          decision variable (q_t[i]).
    */
   void CalcGradient(const TrajectoryOptimizerState<T>& state,
-                    EigenPtr<VectorX<T>> g) const;
+                    EigenPtr<VectorX<T>> g,
+                    std::vector<VectorX<T>>& contact_forces) const;
 
   /**
    * Compute the Hessian of the unconstrained cost L(q) as a sparse
@@ -135,7 +138,8 @@ class TrajectoryOptimizer {
    *          num_steps+1) blocks of size (nq x nq) each.
    */
   void CalcHessian(const TrajectoryOptimizerState<T>& state,
-                   PentaDiagonalMatrix<T>* H) const;
+                   PentaDiagonalMatrix<T>* H,
+                   std::vector<VectorX<T>>& contact_forces) const;
 
   /**
    * Compute the exact Hessian of the unconstrained cost (including second-order
@@ -595,6 +599,7 @@ class TrajectoryOptimizer {
    */
   T CalcCost(const std::vector<VectorX<T>>& q, const std::vector<VectorX<T>>& v,
              const std::vector<VectorX<T>>& tau,
+             const std::vector<VectorX<T>>& contact_forces,
              TrajectoryOptimizerWorkspace<T>* workspace) const;
 
   /**
@@ -660,10 +665,12 @@ class TrajectoryOptimizer {
    * context in turn stores q(t) and v(t) for each timestep.
    * @param a sequence of generalized accelerations
    * @param tau sequence of generalized forces
+   * @param contact_forces sequence of contact forces
    */
   void CalcInverseDynamics(const TrajectoryOptimizerState<T>& state,
                            const std::vector<VectorX<T>>& a,
-                           std::vector<VectorX<T>>* tau) const;
+                           std::vector<VectorX<T>>* tau,
+                           std::vector<VectorX<T>>* contact_forces) const;
 
   /**
    * Helper function for computing the inverse dynamics
@@ -676,10 +683,12 @@ class TrajectoryOptimizer {
    * @param a generalized acceleration
    * @param workspace scratch space for intermediate computations
    * @param tau generalized forces
+   * @param contact_forces contact forces
    */
   void CalcInverseDynamicsSingleTimeStep(
       const Context<T>& context, const VectorX<T>& a,
-      TrajectoryOptimizerWorkspace<T>* workspace, VectorX<T>* tau) const;
+      TrajectoryOptimizerWorkspace<T>* workspace, VectorX<T>* tau,
+      VectorX<T>* contact_forces) const;
 
   /**
    * Calculate the force contribution from contacts for each body, and add them
@@ -688,7 +697,7 @@ class TrajectoryOptimizer {
    * @param context system context storing q and v
    * @param forces total forces applied to the plant, which we will add into.
    */
-  void CalcContactForceContribution(const Context<T>& context,
+  VectorX<T> CalcContactForceContribution(const Context<T>& context,
                                     MultibodyForces<T>* forces) const;
 
   /**

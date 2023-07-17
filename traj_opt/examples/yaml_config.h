@@ -90,6 +90,9 @@ struct TrajOptExampleParams {
     a->Visit(DRAKE_NVP(Qlq));
     a->Visit(DRAKE_NVP(q_min));
     a->Visit(DRAKE_NVP(q_max));
+    a->Visit(DRAKE_NVP(max_num_contacts));
+    a->Visit(DRAKE_NVP(Qcf));
+    // for contact force cost, we sho
   }
   // Initial state
   VectorXd q_init;
@@ -112,6 +115,7 @@ struct TrajOptExampleParams {
   VectorXd Qv;
   VectorXd R;
   VectorXd Qlq;
+  VectorXd Qcf;
 
   // Terminal cost weights (diagonal matrices)
   VectorXd Qfq;
@@ -125,6 +129,9 @@ struct TrajOptExampleParams {
 
   // Maximum number of iterations
   int max_iters;
+
+  // Maximum number of contacts
+  int max_num_contacts;
 
   // Convergence tolerances
   ConvergenceCriteriaTolerances tolerances;

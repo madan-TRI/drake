@@ -408,6 +408,7 @@ void TrajOptExample::PlayBackTrajectory(const std::vector<VectorXd>& q,
 void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
                                           ProblemDefinition* opt_prob) const {
   opt_prob->num_steps = options.num_steps;
+  opt_prob->max_num_contacts = options.max_num_contacts;
 
   // Initial state
   opt_prob->q_init = options.q_init;
@@ -421,6 +422,7 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   opt_prob->Qq = options.Qq.asDiagonal();
   opt_prob->Qv = options.Qv.asDiagonal();
   opt_prob->Qlq = options.Qlq.asDiagonal();
+  opt_prob->Qcf = options.Qcf.asDiagonal();
   opt_prob->Qf_q = options.Qfq.asDiagonal();
   opt_prob->Qf_v = options.Qfv.asDiagonal();
   opt_prob->R = options.R.asDiagonal();

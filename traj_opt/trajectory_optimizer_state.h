@@ -63,6 +63,8 @@ struct TrajectoryOptimizerCache {
     trajectory_data.v.assign(num_steps + 1, VectorX<T>(nv));
     trajectory_data.a.assign(num_steps, VectorX<T>(nv));
     inverse_dynamics_cache.tau.assign(num_steps, VectorX<T>(nv));
+    // TODO(rishabh): specify the correct shape
+    inverse_dynamics_cache.contact_forces.assign(num_steps, VectorX<T>(1));
     N_plus.assign(num_steps + 1, MatrixX<T>::Zero(nv, nq));
     scale_factors.setConstant(1.0);
     constraint_jacobian.setZero();
@@ -128,6 +130,10 @@ struct TrajectoryOptimizerCache {
     // Generalized forces at each timestep
     // [tau(0), tau(1), ..., tau(num_steps-1)]
     std::vector<VectorX<T>> tau;
+
+    // Contact forces at each timestep
+    // [f_n(0), f_n(1), ..., f_n(num_steps-1)]
+    std::vector<VectorX<T>> contact_forces;
 
     bool up_to_date{false};
   } inverse_dynamics_cache;
