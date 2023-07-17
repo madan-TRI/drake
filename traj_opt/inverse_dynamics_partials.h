@@ -31,6 +31,11 @@ struct InverseDynamicsPartials {
     dtau_dqt.assign(num_steps, MatrixX<T>(nv, nq));
     dtau_dqp.assign(num_steps, MatrixX<T>(nv, nq));
 
+    // TODO(rishabh): set correct dimensions later
+    df_dqm.assign(num_steps, MatrixX<T>(1, nq));
+    df_dqt.assign(num_steps, MatrixX<T>(1, nq));
+    df_dqp.assign(num_steps, MatrixX<T>(1, nq)); 
+
     // Set all derivatives w.r.t q(-1) to NaN
     dtau_dqm[0].setConstant(nv, nq, NAN);
 
@@ -81,6 +86,12 @@ struct InverseDynamicsPartials {
   //                                     d(tau_{num_steps-1})/d(q_{num_steps})]
   //
   std::vector<MatrixX<T>> dtau_dqp;
+
+  // Partial of f_t with respect to q_t
+  // TODO(rishabh): Elaborate on this.
+  std::vector<MatrixX<T>> df_dqt;
+  std::vector<MatrixX<T>> df_dqp;
+  std::vector<MatrixX<T>> df_dqm;
 };
 
 }  // namespace traj_opt

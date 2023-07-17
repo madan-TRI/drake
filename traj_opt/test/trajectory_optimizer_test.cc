@@ -55,7 +55,8 @@ class TrajectoryOptimizerTester {
                                   const TrajectoryOptimizerState<double>& state,
                                   const std::vector<VectorXd>& a,
                                   std::vector<VectorXd>* tau) {
-    optimizer.CalcInverseDynamics(state, a, tau);
+    std::vector<VectorXd>contact_forces;
+    optimizer.CalcInverseDynamics(state, a, tau, &contact_forces);
   }
 
   static void CalcInverseDynamicsPartials(

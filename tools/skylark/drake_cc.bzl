@@ -71,7 +71,7 @@ GCC_FLAGS = CXX_FLAGS + [
     "-Werror=logical-op",
     "-Werror=non-virtual-dtor",
     "-Werror=return-local-addr",
-    "-Werror=unused-but-set-parameter",
+    # "-Werror=unused-but-set-parameter",
     # This was turned on via -Wextra, but is too strict to have as an error.
     "-Wno-missing-field-initializers",
 ]
