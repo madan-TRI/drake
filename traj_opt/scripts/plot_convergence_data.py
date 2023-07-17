@@ -17,9 +17,9 @@ import os
 import sys
 
 # Command-line flags determine which example (pendulum, acrobot, spinner) we're
-# dealing with. 
+# dealing with.
 if (len(sys.argv) != 2):
-    print(f"Usage: {sys.argv[0]} {possible_example_names}")
+    print(f"Usage: {sys.argv[0]} {possible_example_names} {qcf}")
     print("\nThe corresponding example must be run first (e.g. 'bazel run traj_opt/examples:pendulum`), with 'save_solver_stats_csv=true'")
     sys.exit(1)
 example_name = sys.argv[1]
