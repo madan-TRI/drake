@@ -64,6 +64,12 @@ struct ProblemDefinition {
 
   // Target generalized velocities at each time step
   std::vector<VectorXd> v_nom;
+
+  // Max number of contacts
+  int max_num_contacts;
+
+  // Contact force cost coefficients
+  MatrixXd Qcf;
 };
 
 }  // namespace traj_opt
