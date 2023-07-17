@@ -209,5 +209,11 @@
       </axis>
       <pose>0 0 -0.075 0 0 0</pose>
     </joint>
+    <drake:collision_filter_group name="all_links">
+      <drake:member>link1</drake:member>
+      <drake:member>link2</drake:member>
+      <drake:member>link3</drake:member>
+      <drake:ignored_collision_filter_group>all_links</drake:ignored_collision_filter_group>
+    </drake:collision_filter_group>
   </model>
 </sdf>

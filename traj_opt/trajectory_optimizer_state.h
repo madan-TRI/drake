@@ -64,7 +64,7 @@ struct TrajectoryOptimizerCache {
     trajectory_data.a.assign(num_steps, VectorX<T>(nv));
     inverse_dynamics_cache.tau.assign(num_steps, VectorX<T>(nv));
     // TODO(rishabh): specify the correct shape
-    inverse_dynamics_cache.contact_forces.assign(num_steps, VectorX<T>(1));
+    inverse_dynamics_cache.contact_forces.assign(num_steps + 1, VectorX<T>(1));
     N_plus.assign(num_steps + 1, MatrixX<T>::Zero(nv, nq));
     scale_factors.setConstant(1.0);
     constraint_jacobian.setZero();
