@@ -452,6 +452,7 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   opt_prob->Qv = options.Qv.asDiagonal();
   opt_prob->Qlq = options.Qlq.asDiagonal();
   opt_prob->Qcf = options.Qcf;
+  opt_prob->force_threshold = options.force_threshold;
   opt_prob->Qf_q = options.Qfq.asDiagonal();
   opt_prob->Qf_v = options.Qfv.asDiagonal();
   opt_prob->R = options.R.asDiagonal();
