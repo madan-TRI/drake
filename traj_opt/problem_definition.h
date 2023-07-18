@@ -70,6 +70,8 @@ struct ProblemDefinition {
 
   // Contact force cost coefficients
   double Qcf;
+
+  double force_threshold;
 };
 
 }  // namespace traj_opt
