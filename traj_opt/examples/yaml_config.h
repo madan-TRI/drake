@@ -92,7 +92,7 @@ struct TrajOptExampleParams {
     a->Visit(DRAKE_NVP(q_max));
     a->Visit(DRAKE_NVP(max_num_contacts));
     a->Visit(DRAKE_NVP(Qcf));
-    // for contact force cost, we sho
+    a->Visit(DRAKE_NVP(force_threshold));
   }
   // Initial state
   VectorXd q_init;
@@ -116,6 +116,7 @@ struct TrajOptExampleParams {
   VectorXd R;
   VectorXd Qlq;
   double Qcf;
+  double force_threshold;
 
   // Terminal cost weights (diagonal matrices)
   VectorXd Qfq;
