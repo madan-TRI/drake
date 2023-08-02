@@ -43,24 +43,14 @@ fig.suptitle(f"{example_name} contact force data")
 ax[0].plot(iters, data["contact_force"])
 ax[0].set_ylabel("contact force")
 ax[0].set_xlabel("time")
-ax[0].set_ylim((0, 30))
+ax[0].set_ylim((-0.1, 0.1))
 # set title
 ax[0].title.set_text(f"contact_force_penalty_weight = {qcf}")
 
 ax[1].plot(iters_0, data_0["contact_force"])
 ax[1].set_ylabel("contact force")
 ax[0].set_xlabel("time")
-ax[1].set_ylim((0, 30))
+ax[1].set_ylim((-0.1, 0.1))
 ax[1].title.set_text(f"contact_force_penalty_weight = 0")
 
 plt.show()
-
-
-#iters_tr_accepted = []
-#tr_accepted = []
-#eta = 0.0
-#for i in range(len(iters)):
-#    if data["trust_ratio"][i] > eta:
-#        tr_accepted.append(data["trust_ratio"][i])
-#        iters_tr_accepted.append(iters[i])
-#ax[1,1].plot(iters_tr_accepted, tr_accepted)

@@ -32,8 +32,8 @@ struct ProblemDefinition {
   VectorXd v_init;
 
   // Joint Position Limits
-  VectorXd q_min;
-  VectorXd q_max;
+  MatrixXd q_min;
+  MatrixXd q_max;
 
   // Running cost coefficients for generalized positions
   // N.B. these weights are per unit of time

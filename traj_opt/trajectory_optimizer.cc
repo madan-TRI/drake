@@ -166,8 +166,8 @@ T TrajectoryOptimizer<T>::CalcCost(
   VectorX<T>& v_err = workspace->v_size_tmp1;
 
   // Joint limit error terms
-  VectorX<T>& q_low_err = workspace->q_size_tmp1;
-  VectorX<T>& q_high_err = workspace->q_size_tmp1;
+  VectorX<T> q_low_err(q_err.size());
+  VectorX<T> q_high_err(q_err.size());
 
   // Running cost
   for (int t = 0; t < num_steps(); ++t) {
@@ -178,9 +178,9 @@ T TrajectoryOptimizer<T>::CalcCost(
     cost += T(tau[t].transpose() * prob_.R * tau[t]);
     
     // add joint position limit cost
-    q_low_err = prob_.q_min - q[t];
+    q_low_err = prob_.q_min.diagonal() - q[t];
     q_low_err = q_low_err.cwiseMax(0);
-    q_high_err = q[t] - prob_.q_max;
+    q_high_err = q[t] - prob_.q_max.diagonal();
     q_high_err = q_high_err.cwiseMax(0);
     cost += T(q_low_err.transpose() * prob_.Qlq * q_low_err);
     cost += T(q_high_err.transpose() * prob_.Qlq * q_high_err);
@@ -198,9 +198,10 @@ T TrajectoryOptimizer<T>::CalcCost(
   v_err = v[num_steps()] - prob_.v_nom[num_steps()];
   cost += T(q_err.transpose() * prob_.Qf_q * q_err);
   cost += T(v_err.transpose() * prob_.Qf_v * v_err);
-  q_low_err = prob_.q_min - q[num_steps()];
+
+  q_low_err = prob_.q_min.diagonal() - q[num_steps()];
+  q_high_err = q[num_steps()] - prob_.q_max.diagonal();
   q_low_err = q_low_err.cwiseMax(0);
-  q_high_err = q[num_steps()] - prob_.q_max;
   q_high_err = q_high_err.cwiseMax(0);
   cost += T(q_low_err.transpose() * prob_.Qlq * q_low_err);
   cost += T(q_high_err.transpose() * prob_.Qlq * q_high_err);
@@ -304,7 +305,7 @@ VectorX<T> TrajectoryOptimizer<T>::CalcContactForceContribution(
   // any geometry queries beyond this distance
   // const double eps = sqrt(std::numeric_limits<double>::epsilon());
   // double threshold = -sigma * log(exp(eps / (sigma * k)) - 1.0);
-  double threshold = 1000;
+  double threshold = 1e-2;
 
   // Get signed distance pairs
   const geometry::QueryObject<T>& query_object =
@@ -411,7 +412,7 @@ VectorX<T> TrajectoryOptimizer<T>::CalcContactForceContribution(
     const T fn = compliant_fn * dissipation_factor;
     // TODO(): check if this is correct later.
     if (pair.distance < 0) {
-      contact_forces[contact_index] = fn;
+      contact_forces[contact_index] = -pair.distance;
       contact_index++;
     }
 
@@ -439,6 +440,7 @@ VectorX<T> TrajectoryOptimizer<T>::CalcContactForceContribution(
     forces->mutable_body_forces()[bodyA.node_index()] += F_AAo_W;
     forces->mutable_body_forces()[bodyB.node_index()] += F_BBo_W;
   }
+
   return contact_forces;
 }
 
@@ -1279,9 +1281,7 @@ void TrajectoryOptimizer<T>::CalcGradient(
   VectorX<T>& taup_term = workspace->tau_size_tmp3;
 
   VectorX<T> qlt_term(nq);
-  qlt_term.setZero();
   VectorX<T> cft_term(nq);
-  cft_term.setZero();
 
   for (int t = 1; t < num_steps(); ++t) {
     // Contribution from position cost
@@ -1310,11 +1310,8 @@ void TrajectoryOptimizer<T>::CalcGradient(
     }
 
     // Contribution from joint limit cost
-    qlt_term = (q[t] - prob_.q_max).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt - (prob_.q_min - q[t]).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt;
+    qlt_term = (q[t] - prob_.q_max.diagonal()).transpose().cwiseMax(0) * 2 * prob_.Qlq * dt + (q[t] - prob_.q_min.diagonal()).transpose().cwiseMin(0) * 2 * prob_.Qlq * dt;
 
-    // TODO(rishabh): add contribution from contact force cost
-    // use weights from yaml file
-    // TODO(rishabh): calculating the fp_term
     if (contact_forces[t].size() > 0)
       cft_term = prob_.Qcf * dt * (contact_forces[t] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[t].size())).cwiseMax(0).transpose() * df_dqt[t];
     else
@@ -1335,11 +1332,11 @@ void TrajectoryOptimizer<T>::CalcGradient(
   vt_term = (v[num_steps()] - prob_.v_nom[num_steps()]).transpose() * 2 *
             prob_.Qf_v * dvt_dqt[num_steps()];
   
-  qlt_term = (q[num_steps()] - prob_.q_max).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt - (prob_.q_min - q[num_steps()]).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt;
+  qlt_term = (q[num_steps()] - prob_.q_max.diagonal()).transpose().cwiseMax(0) * 2 * prob_.Qlq + (q[num_steps()] - prob_.q_min.diagonal()).transpose().cwiseMin(0) * 2 * prob_.Qlq * dt;
 
   cft_term = 2 * prob_.Qcf * dt * (contact_forces[num_steps()] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[num_steps()].size())).cwiseMax(0).transpose() * df_dqt[num_steps()];
 
-  g->tail(nq) = qt_term + vt_term + taum_term + qlt_term + cft_term;
+  g->tail(nq) = qt_term + vt_term + taum_term + cft_term + qlt_term;
 
   // Add proximal operator term to the gradient, if requested
   if (params_.proximal_operator) {
@@ -1438,21 +1435,17 @@ void TrajectoryOptimizer<T>::CalcHessian(
     } else {
       dgt_dqt += dvt_dqm[t + 1].transpose() * Qf_v * dvt_dqm[t + 1];
     }
-
+  
     // recalculate gradient term for joint limit violation cost to further compute the Hessian
-    qlt_term = (q[t] - prob_.q_max).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt - (prob_.q_min - q[t]).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt;
+    qlt_term = (q[t] - prob_.q_max).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt + (q[t] - prob_.q_min).cwiseMin(0).transpose() * 2 * prob_.Qlq * dt;
     // TODO (rishabh): Improve this computation
     for (int i = 0; i < qlt_term.size(); i++) {
-      if (qlt_term[i] < 0) {
-        qlt_term[i] = -2 * prob_.Qlq.diagonal()[i] * dt;
-      }
-      else if (qlt_term[i] > 0)
-      {
+      if (qlt_term[i] != 0)
         qlt_term[i] = 2 * prob_.Qlq.diagonal()[i] * dt;
-      }
     }
+    // qlt_term = qlt_term.cwiseMin(0.1).cwiseMax(-0.1);
     dgt_dqt.diagonal() = dgt_dqt.diagonal() + qlt_term;
-    
+
     // dg_t/dq_{t+1}
     MatrixX<T>& dgt_dqp = B[t + 1];
     dgt_dqp = dtau_dqp[t].transpose() * R * dtau_dqt[t];
@@ -1478,18 +1471,13 @@ void TrajectoryOptimizer<T>::CalcHessian(
   dgT_dqT +=
       dtau_dqp[num_steps() - 1].transpose() * R * dtau_dqp[num_steps() - 1];
 
-  qlt_term = (q[num_steps()] - prob_.q_max).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt - (prob_.q_min - q[num_steps()]).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt;
+  qlt_term = (q[num_steps()] - prob_.q_max).cwiseMax(0).transpose() * 2 * prob_.Qlq * dt + (q[num_steps()] - prob_.q_min).cwiseMin(0).transpose() * 2 * prob_.Qlq * dt;
   for (int i = 0; i < qlt_term.size(); i++) {
-    if (qlt_term[i] < 0) {
-      qlt_term[i] = -2 * prob_.Qlq.diagonal()[i] * dt;
-    }
-    else if (qlt_term[i] > 0)
-    {
-      qlt_term[i] = 2 * prob_.Qlq.diagonal()[i] * dt;
-    }
+    if (qlt_term[i] != 0)
+      qlt_term[i] = 2 * prob_.Qlq.diagonal()[i];
   }
   dgT_dqT.diagonal() += qlt_term;
-  dgT_dqT += 2 * prob_.Qcf * df_dqt[num_steps()].transpose() * df_dqt[num_steps()];
+  dgT_dqT += 2 * prob_.Qcf * dt * df_dqt[num_steps()].transpose() * df_dqt[num_steps()];
   // Add proximal operator terms to the Hessian, if requested
   if (params_.proximal_operator) {
     for (int t = 0; t <= num_steps(); ++t) {
