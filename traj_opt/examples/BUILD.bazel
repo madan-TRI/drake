@@ -213,6 +213,30 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "ee_3d_limb",
+    srcs = ["ee_3d_limb.cc"],
+    add_test_rule = 1,
+    data = [
+        ":ee_3d_limb.yaml",
+        ":models",
+        ":demo.yaml",
+        "//manipulation/models/jaco_description:models",
+        "@drake_models//:wsg_50_hydro_bubble/meshes/bubble_finger.mtl",
+        "@drake_models//:wsg_50_hydro_bubble/meshes/bubble_finger.obj",
+        "@drake_models//:wsg_50_hydro_bubble/meshes/ellipsoid_bubble_geometry.mtl",  # noqa
+        "@drake_models//:wsg_50_hydro_bubble/meshes/ellipsoid_bubble_geometry.obj",  # noqa
+        "@drake_models//:wsg_50_description/meshes/wsg_body.obj",
+    ],
+    test_rule_args = [],
+    deps = [
+        ":example_base",
+        "//common:find_resource",
+        "//multibody/parsing",
+        "//multibody/plant",
+    ],
+)
+
 
 drake_cc_binary(
     name = "2dof_spinner",

@@ -380,6 +380,8 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   // Play back the result on the visualizer
   if (options.play_optimal_trajectory) {
     PlayBackTrajectory(solution.q, options.time_step);
+    std::cout << "Playing optimal trajectory. Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
 
   return solution;
@@ -444,8 +446,8 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   opt_prob->v_init = options.v_init;
 
   // Joint Position Limits
-  opt_prob->q_min = options.q_min;
-  opt_prob->q_max = options.q_max;
+  opt_prob->q_min = options.q_min.asDiagonal();
+  opt_prob->q_max = options.q_max.asDiagonal();
 
   // Cost weights
   opt_prob->Qq = options.Qq.asDiagonal();
