@@ -11,6 +11,8 @@
 #include "drake/traj_opt/examples/mpc_controller.h"
 #include "drake/traj_opt/examples/pd_plus_controller.h"
 #include "drake/visualization/visualization_config_functions.h"
+#include "drake/common/trajectories/piecewise_polynomial.h"
+#include "drake/multibody/meshcat/contact_visualizer.h"
 
 namespace drake {
 namespace traj_opt {
@@ -24,6 +26,16 @@ using mpc::Interpolator;
 using mpc::ModelPredictiveController;
 using pd_plus::PdPlusController;
 using systems::DiscreteTimeDelay;
+using trajectories::PiecewisePolynomial;
+
+struct Demonstration {
+  std::vector<VectorXd> observations;
+
+  template <typename Archive>
+  void Serialize(Archive* a) {
+    a->Visit(DRAKE_NVP(observations));
+  }
+};
 
 void TrajOptExample::RunExample(const std::string options_file) const {
   // Load parameters from file
@@ -66,6 +78,11 @@ void TrajOptExample::RunModelPredictiveControl(
   // Connect to the Meshcat visualizer
   auto& visualizer =
       MeshcatVisualizerd::AddToBuilder(&builder, scene_graph, meshcat_);
+  
+  multibody::meshcat::ContactVisualizerParams cparams;
+  cparams.newtons_per_meter = 60.0;
+  auto& contact = multibody::meshcat::ContactVisualizerd::AddToBuilder(
+      &builder, plant, meshcat_, std::move(cparams));
 
   // Create a system model for the controller
   DiagramBuilder<double> ctrl_builder;
@@ -171,6 +188,7 @@ void TrajOptExample::RunModelPredictiveControl(
 
   // Print profiling info
   std::cout << TableOfAverages() << std::endl;
+  contact.Delete();
 }
 
 TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
@@ -183,6 +201,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   auto [plant, scene_graph] = AddMultibodyPlant(config, &builder);
   CreatePlantModel(&plant);
   plant.Finalize();
+  // const int nq = plant.num_positions();
   const int nv = plant.num_velocities();
 
   auto diagram = builder.Build();
@@ -199,23 +218,68 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   SolverParameters solver_params;
   SetSolverParameters(options, &solver_params);
 
-  // Establish an initial guess
-  std::vector<VectorXd> q_guess = MakeLinearInterpolation(
-      opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
-  NormalizeQuaternions(plant, &q_guess);
+  std::vector<VectorXd> q_guess;
+  // If use_demonstration is true, load the demonstration from a yaml file
+  // Otherwise, use the linear interpolation between q_init and q_guess as the initial guess
+  std::cout << "use_demonstration: " << options.use_demonstration << std::endl;
+  if (options.use_demonstration) {
+    // TODO: Support absolute path
+    const std::string demo_file = "drake/traj_opt/examples/demo.yaml";
+    // Load yaml file with initial guess
+    Demonstration data = yaml::LoadYamlFile<Demonstration>(
+        FindResourceOrThrow(demo_file));
+    // Check if demo is nullopt
+    // if (!demo) {
+    //   throw std::runtime_error("use_demonstration is set to true. Please provide a valid demonstration.");
+    // }
+    // std::vector<VectorXd> q_guess_tmp = demo.value();
+  
+    // create a vector of input times with the same size as q_guess and delta = 0.01
+    // TODO: Support arbitrary delta
+    // std::vector<double> input_time(q_guess_tmp.size());
+    // for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
+    //   input_time[i] = i * 0.01;
+    // }
+    // std::vector<double> opt_time_values(opt_prob.num_steps + 1);
+    // for (int i = 0; i < options.num_steps + 1; i++) {
+    //   opt_time_values[i] = i * options.time_step;
+    // }
 
+    // std::vector<MatrixXd> q_knots(q_guess_tmp.size(), VectorXd(nq));
+    // for (std::size_t i = 0; i < q_guess_tmp.size(); ++i) {
+    //   q_knots[i] = q_guess_tmp[i];
+    // }
+
+    // PiecewisePolynomial<double> traj = PiecewisePolynomial<double>::CubicWithContinuousSecondDerivatives(
+    //               input_time, q_knots);
+    
+    // for (int i = 0; i < options.num_steps + 1; i++) {
+    //   q_guess.push_back(traj.value(opt_time_values[i]));
+    // }
+  }
+  else
+  {
+    q_guess = MakeLinearInterpolation(
+        opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
+    
+  }
+  NormalizeQuaternions(plant, &q_guess);
   // N.B. This should always be the case, and is checked by the solver. However,
   // sometimes floating point + normalization stuff makes q_guess != q_init, so
-  // we'll just doubly enforce that here
+  // we'll just doubly enforce that here]
   DRAKE_DEMAND((q_guess[0] - opt_prob.q_init).norm() < 1e-8);
   q_guess[0] = opt_prob.q_init;
 
   // Visualize the target trajectory and initial guess, if requested
   if (options.play_target_trajectory) {
     PlayBackTrajectory(opt_prob.q_nom, options.time_step);
+    std::cout << "Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
   if (options.play_initial_guess) {
     PlayBackTrajectory(q_guess, options.time_step);
+    std::cout << "Playing guess now. Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
 
   // Solve the optimzation problem
@@ -248,9 +312,23 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
       }
     }
   }
+
+  double contact_force_max = 0;
+  VectorXd abs_cf_t;
+  for (int t = 0; t < options.num_steps; ++t) {
+    abs_cf_t = solution.contact_forces[t];
+    for (int i = 0; i < abs_cf_t.size(); ++i) {
+      if (abs_cf_t(i) > contact_force_max) {
+        contact_force_max = abs_cf_t(i);
+      }
+    }
+  }
+
   std::cout << std::endl;
   std::cout << fmt::format("Max torques: {}", fmt_eigen(tau_max.transpose()))
             << std::endl;
+
+  std::cout << "Max contact force: " << contact_force_max << std::endl;
 
   // Report maximum actuated and unactuated torques
   // TODO(vincekurtz): deal with the fact that B is not well-defined for some
@@ -304,6 +382,8 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   // Play back the result on the visualizer
   if (options.play_optimal_trajectory) {
     PlayBackTrajectory(solution.q, options.time_step);
+    std::cout << "Playing optimal trajectory. Press enter to continue..." << std::endl;
+    std::cin.ignore();
   }
 
   return solution;
@@ -323,6 +403,11 @@ void TrajOptExample::PlayBackTrajectory(const std::vector<VectorXd>& q,
 
   auto& visualizer =
       MeshcatVisualizerd::AddToBuilder(&builder, scene_graph, meshcat_);
+
+  multibody::meshcat::ContactVisualizerParams cparams;
+  cparams.newtons_per_meter = 30.0;
+  auto& contact = multibody::meshcat::ContactVisualizerd::AddToBuilder(
+      &builder, plant, meshcat_, std::move(cparams));
 
   auto diagram = builder.Build();
   std::unique_ptr<systems::Context<double>> diagram_context =
@@ -350,19 +435,28 @@ void TrajOptExample::PlayBackTrajectory(const std::vector<VectorXd>& q,
   }
   visualizer.StopRecording();
   visualizer.PublishRecording();
+  contact.Delete();
 }
 
 void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
                                           ProblemDefinition* opt_prob) const {
   opt_prob->num_steps = options.num_steps;
+  opt_prob->max_num_contacts = options.max_num_contacts;
 
   // Initial state
   opt_prob->q_init = options.q_init;
   opt_prob->v_init = options.v_init;
 
+  // Joint Position Limits
+  opt_prob->q_min = options.q_min.asDiagonal();
+  opt_prob->q_max = options.q_max.asDiagonal();
+
   // Cost weights
   opt_prob->Qq = options.Qq.asDiagonal();
   opt_prob->Qv = options.Qv.asDiagonal();
+  opt_prob->Qlq = options.Qlq.asDiagonal();
+  opt_prob->Qcf = options.Qcf;
+  opt_prob->force_threshold = options.force_threshold;
   opt_prob->Qf_q = options.Qfq.asDiagonal();
   opt_prob->Qf_v = options.Qfv.asDiagonal();
   opt_prob->R = options.R.asDiagonal();

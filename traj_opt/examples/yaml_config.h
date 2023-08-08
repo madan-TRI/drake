@@ -86,10 +86,21 @@ struct TrajOptExampleParams {
     a->Visit(DRAKE_NVP(q_nom_relative_to_q_init));
     a->Visit(DRAKE_NVP(save_mpc_result_as_static_html));
     a->Visit(DRAKE_NVP(static_html_filename));
+    a->Visit(DRAKE_NVP(use_demonstration));
+    a->Visit(DRAKE_NVP(Qlq));
+    a->Visit(DRAKE_NVP(q_min));
+    a->Visit(DRAKE_NVP(q_max));
+    a->Visit(DRAKE_NVP(max_num_contacts));
+    a->Visit(DRAKE_NVP(Qcf));
+    a->Visit(DRAKE_NVP(force_threshold));
   }
   // Initial state
   VectorXd q_init;
   VectorXd v_init;
+
+  // Joint position limits
+  VectorXd q_min;
+  VectorXd q_max;
 
   // Nominal state at each timestep is defined by linear interpolation between
   // q_nom_start and q_nom_end
@@ -103,6 +114,9 @@ struct TrajOptExampleParams {
   VectorXd Qq;
   VectorXd Qv;
   VectorXd R;
+  VectorXd Qlq;
+  double Qcf;
+  double force_threshold;
 
   // Terminal cost weights (diagonal matrices)
   VectorXd Qfq;
@@ -116,6 +130,9 @@ struct TrajOptExampleParams {
 
   // Maximum number of iterations
   int max_iters;
+
+  // Maximum number of contacts
+  int max_num_contacts;
 
   // Convergence tolerances
   ConvergenceCriteriaTolerances tolerances;
@@ -235,6 +252,9 @@ struct TrajOptExampleParams {
 
   // File name to save the meshcat recordint file to
   std::string static_html_filename{"/tmp/meshcat_recording.html"};
+
+  // Flag for using a demonstration as the initial guess
+  bool use_demonstration{false};
 };
 
 }  // namespace examples

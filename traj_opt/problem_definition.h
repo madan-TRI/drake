@@ -31,6 +31,10 @@ struct ProblemDefinition {
   // Initial generalized velocities
   VectorXd v_init;
 
+  // Joint Position Limits
+  MatrixXd q_min;
+  MatrixXd q_max;
+
   // Running cost coefficients for generalized positions
   // N.B. these weights are per unit of time
   // TODO(vincekurtz): consider storing these as VectorXd, assuming they are
@@ -40,6 +44,10 @@ struct ProblemDefinition {
   // Running cost coefficients for generalized velocities
   // N.B. these weights are per unit of time
   MatrixXd Qv;
+
+  // Running cost coefficients for joint limit violations
+  // N.B. these weights are per unit of time
+  MatrixXd Qlq;
 
   // Terminal cost coefficients for generalized positions
   MatrixXd Qf_q;
@@ -56,6 +64,14 @@ struct ProblemDefinition {
 
   // Target generalized velocities at each time step
   std::vector<VectorXd> v_nom;
+
+  // Max number of contacts
+  int max_num_contacts;
+
+  // Contact force cost coefficients
+  double Qcf;
+
+  double force_threshold;
 };
 
 }  // namespace traj_opt
