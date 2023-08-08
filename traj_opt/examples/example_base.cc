@@ -201,7 +201,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   auto [plant, scene_graph] = AddMultibodyPlant(config, &builder);
   CreatePlantModel(&plant);
   plant.Finalize();
-  const int nq = plant.num_positions();
+  // const int nq = plant.num_positions();
   const int nv = plant.num_velocities();
 
   auto diagram = builder.Build();
@@ -221,36 +221,41 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   std::vector<VectorXd> q_guess;
   // If use_demonstration is true, load the demonstration from a yaml file
   // Otherwise, use the linear interpolation between q_init and q_guess as the initial guess
+  std::cout << "use_demonstration: " << options.use_demonstration << std::endl;
   if (options.use_demonstration) {
     // TODO: Support absolute path
     const std::string demo_file = "drake/traj_opt/examples/demo.yaml";
     // Load yaml file with initial guess
     Demonstration data = yaml::LoadYamlFile<Demonstration>(
         FindResourceOrThrow(demo_file));
-
-    std::vector<VectorXd> q_guess_tmp = data.observations;
+    // Check if demo is nullopt
+    // if (!demo) {
+    //   throw std::runtime_error("use_demonstration is set to true. Please provide a valid demonstration.");
+    // }
+    // std::vector<VectorXd> q_guess_tmp = demo.value();
+  
     // create a vector of input times with the same size as q_guess and delta = 0.01
     // TODO: Support arbitrary delta
-    std::vector<double> input_time(q_guess_tmp.size());
-    for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
-      input_time[i] = i * 0.01;
-    }
-    std::vector<double> opt_time_values(opt_prob.num_steps + 1);
-    for (int i = 0; i < options.num_steps + 1; i++) {
-      opt_time_values[i] = i * options.time_step;
-    }
+    // std::vector<double> input_time(q_guess_tmp.size());
+    // for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
+    //   input_time[i] = i * 0.01;
+    // }
+    // std::vector<double> opt_time_values(opt_prob.num_steps + 1);
+    // for (int i = 0; i < options.num_steps + 1; i++) {
+    //   opt_time_values[i] = i * options.time_step;
+    // }
 
-    std::vector<MatrixXd> q_knots(q_guess_tmp.size(), VectorXd(nq));
-    for (std::size_t i = 0; i < q_guess_tmp.size(); ++i) {
-      q_knots[i] = q_guess_tmp[i];
-    }
+    // std::vector<MatrixXd> q_knots(q_guess_tmp.size(), VectorXd(nq));
+    // for (std::size_t i = 0; i < q_guess_tmp.size(); ++i) {
+    //   q_knots[i] = q_guess_tmp[i];
+    // }
 
-    PiecewisePolynomial<double> traj = PiecewisePolynomial<double>::CubicWithContinuousSecondDerivatives(
-                  input_time, q_knots);
+    // PiecewisePolynomial<double> traj = PiecewisePolynomial<double>::CubicWithContinuousSecondDerivatives(
+    //               input_time, q_knots);
     
-    for (int i = 0; i < options.num_steps + 1; i++) {
-      q_guess.push_back(traj.value(opt_time_values[i]));
-    }
+    // for (int i = 0; i < options.num_steps + 1; i++) {
+    //   q_guess.push_back(traj.value(opt_time_values[i]));
+    // }
   }
   else
   {
@@ -259,7 +264,6 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
     
   }
   NormalizeQuaternions(plant, &q_guess);
-
   // N.B. This should always be the case, and is checked by the solver. However,
   // sometimes floating point + normalization stuff makes q_guess != q_init, so
   // we'll just doubly enforce that here]
@@ -458,7 +462,6 @@ void TrajOptExample::SetProblemDefinition(const TrajOptExampleParams& options,
   opt_prob->R = options.R.asDiagonal();
 
   // Check which DoFs the cost is updated relative to the initial condition for
-  // Doubt (Rishabh)
   VectorX<bool> q_nom_relative = options.q_nom_relative_to_q_init;
   if (q_nom_relative.size() == 0) {
     // If not specified, assume the nominal trajectory is not relative to the
@@ -611,7 +614,6 @@ void TrajOptExample::SetSolverParameters(
   // Hessian rescaling
   solver_params->scaling = options.scaling;
 
-  // Doubt (Rishabh): what's the effect of different scaling methods?
   if (options.scaling_method == "sqrt") {
     solver_params->scaling_method = ScalingMethod::kSqrt;
   } else if (options.scaling_method == "adaptive_sqrt") {
