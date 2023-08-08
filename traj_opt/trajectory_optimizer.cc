@@ -169,6 +169,7 @@ T TrajectoryOptimizer<T>::CalcCost(
   VectorX<T> q_low_err(q_err.size());
   VectorX<T> q_high_err(q_err.size());
 
+  std::cout << "starting calculation " << std::endl;
   // Running cost
   for (int t = 0; t < num_steps(); ++t) {
     q_err = q[t] - prob_.q_nom[t];
@@ -186,7 +187,8 @@ T TrajectoryOptimizer<T>::CalcCost(
     cost += T(q_high_err.transpose() * prob_.Qlq * q_high_err);
 
     // TODO(rishabh): use weights from yaml file
-    cost += T((contact_forces[t] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[t].size())).cwiseMax(0).transpose() * prob_.Qcf * (contact_forces[t] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[t].size())).cwiseMax(0));
+    if (prob_.Qcf > 0)
+      cost += T((contact_forces[t] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[t].size())).cwiseMax(0).transpose() * prob_.Qcf * (contact_forces[t] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[t].size())).cwiseMax(0));
   }
 
   // Scale running cost by dt (so the optimization problem we're solving doesn't
@@ -205,9 +207,10 @@ T TrajectoryOptimizer<T>::CalcCost(
   q_high_err = q_high_err.cwiseMax(0);
   cost += T(q_low_err.transpose() * prob_.Qlq * q_low_err);
   cost += T(q_high_err.transpose() * prob_.Qlq * q_high_err);
-  cost += T((contact_forces[num_steps()] - prob_.force_threshold * 
-      VectorX<T>::Ones(contact_forces[num_steps()].size())).cwiseMax(0).transpose() * 
-      prob_.Qcf * (contact_forces[num_steps()] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[num_steps()].size())).cwiseMax(0));
+  if (prob_.Qcf > 0)
+    cost += T((contact_forces[num_steps()] - prob_.force_threshold * 
+        VectorX<T>::Ones(contact_forces[num_steps()].size())).cwiseMax(0).transpose() * 
+        prob_.Qcf * (contact_forces[num_steps()] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[num_steps()].size())).cwiseMax(0));
 
   return cost;
 }
@@ -754,7 +757,6 @@ void TrajectoryOptimizer<T>::CalcInverseDynamicsPartialsFiniteDiff(
         CalcInverseDynamicsSingleTimeStep(context_t, a_eps_t, &workspace,
                                           &tau_eps_t, &contact_forces_eps_t);
         dtau_dqt[t].col(i) = (tau_eps_t - tau[t]) / dq_i;
-        // TODO(rishabh): verify this calculation and check if we need the if-else
         if (contact_forces_eps_t.size() > 0)
           df_dqt[t].col(i) = (contact_forces_eps_t - contact_forces[t]) / dq_i;
         else
@@ -1319,7 +1321,7 @@ void TrajectoryOptimizer<T>::CalcGradient(
 
     // Put it all together to get the gradient w.r.t q[t]
     g->segment(t * nq, nq) =
-        qt_term + vt_term + vp_term + taum_term + taut_term + taup_term + qlt_term + cft_term;
+        qt_term + vt_term + vp_term + taum_term + taut_term + taup_term; // + qlt_term + cft_term;
   }
 
   // TODO: check if we need to do something for the last timestep
@@ -1336,7 +1338,7 @@ void TrajectoryOptimizer<T>::CalcGradient(
 
   cft_term = 2 * prob_.Qcf * dt * (contact_forces[num_steps()] - prob_.force_threshold * VectorX<T>::Ones(contact_forces[num_steps()].size())).cwiseMax(0).transpose() * df_dqt[num_steps()];
 
-  g->tail(nq) = qt_term + vt_term + taum_term + cft_term + qlt_term;
+  g->tail(nq) = qt_term + vt_term + taum_term; // + cft_term + qlt_term;
 
   // Add proximal operator term to the gradient, if requested
   if (params_.proximal_operator) {
@@ -1388,7 +1390,7 @@ void TrajectoryOptimizer<T>::CalcHessian(
   const std::vector<MatrixX<T>>& dtau_dqp = id_partials.dtau_dqp;
   const std::vector<MatrixX<T>>& dtau_dqt = id_partials.dtau_dqt;
   const std::vector<MatrixX<T>>& dtau_dqm = id_partials.dtau_dqm;
-  const std::vector<MatrixX<T>>& df_dqt = id_partials.df_dqt;
+  // const std::vector<MatrixX<T>>& df_dqt = id_partials.df_dqt;
 
   // Get mutable references to the non-zero bands of the Hessian
   std::vector<MatrixX<T>>& A = H->mutable_A();  // 2 rows below diagonal
@@ -1422,11 +1424,11 @@ void TrajectoryOptimizer<T>::CalcHessian(
     dgt_dqt += dtau_dqp[t - 1].transpose() * R * dtau_dqp[t - 1];
     // contact forces term
     // TODO(rishabh): same as CalcGradient, figure out use of df_dqm and final timestep calculation
-    const int nc = heaviside_cf[t].rows();
-    for (int ip =0;ip<nc;++ip){
-      dgt_dqt += 2 * prob_.Qcf * dt * df_dqt[t].row(ip).transpose() *
-                 df_dqt[t].row(ip) * heaviside_cf[t](ip);
-    }
+    // const int nc = heaviside_cf[t].rows();
+    // for (int ip =0;ip<nc;++ip){
+    //   dgt_dqt += 2 * prob_.Qcf * dt * df_dqt[t].row(ip).transpose() *
+    //              df_dqt[t].row(ip) * heaviside_cf[t](ip);
+    // }
 
     dgt_dqt += dtau_dqt[t].transpose() * R * dtau_dqt[t];
     if (t < num_steps() - 1) {
@@ -1444,7 +1446,7 @@ void TrajectoryOptimizer<T>::CalcHessian(
         qlt_term[i] = 2 * prob_.Qlq.diagonal()[i] * dt;
     }
     // qlt_term = qlt_term.cwiseMin(0.1).cwiseMax(-0.1);
-    dgt_dqt.diagonal() = dgt_dqt.diagonal() + qlt_term;
+    // dgt_dqt.diagonal() = dgt_dqt.diagonal() + qlt_term;
 
     // dg_t/dq_{t+1}
     MatrixX<T>& dgt_dqp = B[t + 1];
@@ -1476,8 +1478,8 @@ void TrajectoryOptimizer<T>::CalcHessian(
     if (qlt_term[i] != 0)
       qlt_term[i] = 2 * prob_.Qlq.diagonal()[i];
   }
-  dgT_dqT.diagonal() += qlt_term;
-  dgT_dqT += 2 * prob_.Qcf * dt * df_dqt[num_steps()].transpose() * df_dqt[num_steps()];
+  // dgT_dqT.diagonal() += qlt_term;
+  // dgT_dqT += 2 * prob_.Qcf * dt * df_dqt[num_steps()].transpose() * df_dqt[num_steps()];
   // Add proximal operator terms to the Hessian, if requested
   if (params_.proximal_operator) {
     for (int t = 0; t <= num_steps(); ++t) {
@@ -2830,7 +2832,6 @@ SolverFlag TrajectoryOptimizer<double>::SolveFromWarmStart(
   while (k < params_.max_iterations) {
     // Obtain the candiate update dq
     tr_constraint_active = CalcDoglegPoint(state, Delta, &dq, &dqH);
-
     if (params_.print_debug_data) {
       // Print some info about the Hessian
       const MatrixXd H = EvalHessian(state).MakeDense();
