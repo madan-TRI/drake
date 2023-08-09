@@ -169,7 +169,6 @@ T TrajectoryOptimizer<T>::CalcCost(
   VectorX<T> q_low_err(q_err.size());
   VectorX<T> q_high_err(q_err.size());
 
-  std::cout << "starting calculation " << std::endl;
   // Running cost
   for (int t = 0; t < num_steps(); ++t) {
     q_err = q[t] - prob_.q_nom[t];

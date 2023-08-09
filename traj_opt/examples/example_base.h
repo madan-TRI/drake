@@ -54,7 +54,7 @@ class TrajOptExample {
    * @return TrajectoryOptimizerSolution<double> the optimal trajectory
    */
   TrajectoryOptimizerSolution<double> SolveTrajectoryOptimization(
-      const TrajOptExampleParams& options) const; //, const std::optional<std::vector<VectorXd>>&demo=std::nullopt
+      const TrajOptExampleParams& options, const std::optional<std::vector<VectorXd>>&demo=std::nullopt) const;
 
   /**
    * Use the optimizer as an MPC controller in simulation.

@@ -192,7 +192,7 @@ void TrajOptExample::RunModelPredictiveControl(
 }
 
 TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
-    const TrajOptExampleParams& options) const {
+    const TrajOptExampleParams& options, const std::optional<std::vector<VectorXd>>&demo) const {
   // Create a system model
   // N.B. we need a whole diagram, including scene_graph, to handle contact
   DiagramBuilder<double> builder;
