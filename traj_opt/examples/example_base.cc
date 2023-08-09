@@ -427,7 +427,8 @@ void TrajOptExample::PlayBackTrajectory(const std::vector<VectorXd>& q,
   for (int t = 0; t < N; ++t) {
     diagram_context->SetTime(t * time_step);
     plant.SetPositions(&plant_context, q[t]);
-    diagram->Publish(*diagram_context);
+    auto events = diagram->AllocateCompositeEventCollection();
+    diagram->Publish(*diagram_context, events->get_publish_events());
 
     // Hack to make the playback roughly realtime
     // TODO(vincekurtz): add realtime rate option?
