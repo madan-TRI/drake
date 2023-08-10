@@ -201,7 +201,7 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   auto [plant, scene_graph] = AddMultibodyPlant(config, &builder);
   CreatePlantModel(&plant);
   plant.Finalize();
-  // const int nq = plant.num_positions();
+  const int nq = plant.num_positions();
   const int nv = plant.num_velocities();
 
   auto diagram = builder.Build();
@@ -219,49 +219,38 @@ TrajectoryOptimizerSolution<double> TrajOptExample::SolveTrajectoryOptimization(
   SetSolverParameters(options, &solver_params);
 
   std::vector<VectorXd> q_guess;
-  // If use_demonstration is true, load the demonstration from a yaml file
-  // Otherwise, use the linear interpolation between q_init and q_guess as the initial guess
-  std::cout << "use_demonstration: " << options.use_demonstration << std::endl;
-  if (options.use_demonstration) {
-    // TODO: Support absolute path
-    const std::string demo_file = "drake/traj_opt/examples/demo.yaml";
-    // Load yaml file with initial guess
-    Demonstration data = yaml::LoadYamlFile<Demonstration>(
-        FindResourceOrThrow(demo_file));
-    // Check if demo is nullopt
-    // if (!demo) {
-    //   throw std::runtime_error("use_demonstration is set to true. Please provide a valid demonstration.");
-    // }
-    // std::vector<VectorXd> q_guess_tmp = demo.value();
+  // Use demo if provided, otherwise, use the linear interpolation between q_init and q_guess as the initial guess
+  if (demo != std::nullopt) {
+    std::vector<VectorXd> q_guess_tmp = demo.value();
   
     // create a vector of input times with the same size as q_guess and delta = 0.01
     // TODO: Support arbitrary delta
-    // std::vector<double> input_time(q_guess_tmp.size());
-    // for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
-    //   input_time[i] = i * 0.01;
-    // }
-    // std::vector<double> opt_time_values(opt_prob.num_steps + 1);
-    // for (int i = 0; i < options.num_steps + 1; i++) {
-    //   opt_time_values[i] = i * options.time_step;
-    // }
+    std::vector<double> input_time(q_guess_tmp.size());
+    for (std::size_t i = 0; i < q_guess_tmp.size(); i++) {
+      input_time[i] = i * 0.01;
+    }
+    std::vector<double> opt_time_values(opt_prob.num_steps + 1);
+    for (int i = 0; i < options.num_steps + 1; i++) {
+      opt_time_values[i] = i * options.time_step;
+    }
 
-    // std::vector<MatrixXd> q_knots(q_guess_tmp.size(), VectorXd(nq));
-    // for (std::size_t i = 0; i < q_guess_tmp.size(); ++i) {
-    //   q_knots[i] = q_guess_tmp[i];
-    // }
+    std::vector<MatrixXd> q_knots(q_guess_tmp.size(), VectorXd(nq));
+    for (std::size_t i = 0; i < q_guess_tmp.size(); ++i) {
+      q_knots[i] = q_guess_tmp[i];
+    }
 
-    // PiecewisePolynomial<double> traj = PiecewisePolynomial<double>::CubicWithContinuousSecondDerivatives(
-    //               input_time, q_knots);
+    PiecewisePolynomial<double> traj = PiecewisePolynomial<double>::CubicWithContinuousSecondDerivatives(
+                  input_time, q_knots);
     
-    // for (int i = 0; i < options.num_steps + 1; i++) {
-    //   q_guess.push_back(traj.value(opt_time_values[i]));
-    // }
+    for (int i = 0; i < options.num_steps + 1; i++) {
+      q_guess.push_back(traj.value(opt_time_values[i]));
+    }
   }
   else
   {
     q_guess = MakeLinearInterpolation(
         opt_prob.q_init, options.q_guess, opt_prob.num_steps + 1);
-    
+  
   }
   NormalizeQuaternions(plant, &q_guess);
   // N.B. This should always be the case, and is checked by the solver. However,
@@ -427,8 +416,7 @@ void TrajOptExample::PlayBackTrajectory(const std::vector<VectorXd>& q,
   for (int t = 0; t < N; ++t) {
     diagram_context->SetTime(t * time_step);
     plant.SetPositions(&plant_context, q[t]);
-    auto events = diagram->AllocateCompositeEventCollection();
-    diagram->Publish(*diagram_context, events->get_publish_events());
+    diagram->ForcedPublish(*diagram_context);
 
     // Hack to make the playback roughly realtime
     // TODO(vincekurtz): add realtime rate option?

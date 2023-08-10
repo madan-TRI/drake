@@ -305,9 +305,9 @@ VectorX<T> TrajectoryOptimizer<T>::CalcContactForceContribution(
 
   // Compute the distance at which contact forces are zero: we don't need to do
   // any geometry queries beyond this distance
-  // const double eps = sqrt(std::numeric_limits<double>::epsilon());
-  // double threshold = -sigma * log(exp(eps / (sigma * k)) - 1.0);
-  double threshold = 1e-2;
+  const double eps = sqrt(std::numeric_limits<double>::epsilon());
+  double threshold = -sigma * log(exp(eps / (sigma * k)) - 1.0);
+  // double threshold = 1e-2;
 
   // Get signed distance pairs
   const geometry::QueryObject<T>& query_object =
